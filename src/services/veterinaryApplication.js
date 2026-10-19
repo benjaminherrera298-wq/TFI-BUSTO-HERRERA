@@ -1,3 +1,6 @@
+import { populateSamplePractice } from './samplePractice.js';
+import { PET_AVATARS, findPetAvatar } from './petAvatars.js';
+
 export function startVeterinaryApplication(ui) {
 'use strict';
 
@@ -499,6 +502,16 @@ function load() {
   } catch {
     db = { configured: false };
   }
+
+  if (!db.configured) {
+    db = seed({
+      name: 'Veterinaria Los Aromos', identifier: 'Responsable de ejemplo',
+      address: 'Av. Belgrano 1250, San Miguel de Tucumán', phone: '3815550199',
+      email: 'recepcion@example.com', days: [1, 2, 3, 4, 5, 6],
+      start: '08:00', end: '20:00', duration: 30, logo: ''
+    }, DEMO_ACCOUNTS[0]);
+  }
+  if (populateSamplePractice(db)) persist();
 
   // Migración: bases guardadas antes de conectar el panel del veterinario
   // con la sala de espera puede que no tengan estas colecciones todavía.
@@ -2124,12 +2137,16 @@ function ownerCardColorValue(id) {
 }
 
 function petPhoto(pet, large = false) {
-  return pet.photo
+  const avatar = findPetAvatar(pet.avatarId);
+  const useAvatar = avatar && (pet.imagePreference === 'avatar' || !pet.photo);
+  const source = useAvatar ? avatar.src : pet.photo;
+
+  return source
     ? `
       <img
-        class="${large ? 'profile-photo' : 'logo'}"
-        src="${esc(pet.photo)}"
-        alt="${esc(pet.name)}"
+        class="${large ? 'profile-photo' : 'logo'}${useAvatar ? ' pet-illustration' : ''}"
+        src="${esc(source)}"
+        alt="${esc(pet.name)}${useAvatar ? ' · ' + esc(avatar.label) : ''}"
       >
     `
     : `
@@ -2137,6 +2154,40 @@ function petPhoto(pet, large = false) {
         ${icon('pet')}
       </span>
     `;
+}
+
+function ownerPetImageModal(pet) {
+  const selected = findPetAvatar(pet.avatarId);
+  const usingAvatar = selected && (pet.imagePreference === 'avatar' || !pet.photo);
+
+  modal(`Foto o ícono de ${esc(pet.name)}`, `
+    <div class="owner-avatar-picker">
+      <p class="muted">Elegí el ícono que más se parezca a ${esc(pet.name)} o subí una foto.</p>
+      <div class="owner-avatar-photo-actions">
+        ${button(icon('plus') + ' Subir foto', 'owner-pet-upload', pet.id, 'primary')}
+        ${pet.photo ? button('Usar mi foto', 'owner-pet-use-photo', pet.id) : ''}
+      </div>
+      <p class="owner-avatar-hint muted">PNG, JPG o WebP de hasta 1 MB. Tu foto se conserva si elegís un ícono.</p>
+      ${['Perros', 'Gatos', 'Otros animales'].map(group => `
+        <section class="owner-avatar-group" aria-label="${group}">
+          <h3>${group}</h3>
+          <div class="owner-avatar-grid">
+            ${PET_AVATARS.filter(avatar => avatar.group === group).map(avatar => `
+              <button type="button"
+                class="owner-avatar-option"
+                data-action="owner-pet-avatar-pick"
+                data-id="${esc(pet.id)}:${avatar.id}"
+                aria-label="Elegir ${esc(avatar.label)} para ${esc(pet.name)}"
+                aria-pressed="${Boolean(usingAvatar && pet.avatarId === avatar.id)}">
+                <img src="${esc(avatar.src)}" alt="" width="88" height="88">
+                <span>${esc(avatar.label)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </section>
+      `).join('')}
+    </div>
+  `);
 }
 
 function petsView() {
@@ -2173,16 +2224,8 @@ function petsView() {
                     class="owner-pet-photo-edit"
                     data-action="owner-pet-photo"
                     data-id="${esc(pet.id)}"
-                    title="${
-                      pet.photo
-                        ? 'Cambiar foto'
-                        : 'Agregar foto'
-                    }"
-                    aria-label="${
-                      pet.photo
-                        ? 'Cambiar foto de ' + esc(pet.name)
-                        : 'Agregar foto de ' + esc(pet.name)
-                    }"
+                    title="Elegir foto o ícono"
+                    aria-label="Elegir foto o ícono de ${esc(pet.name)}"
                   >${icon('plus')}</button>
 
                   <button
@@ -5796,10 +5839,9 @@ async function saveEntity(form) {
   });
 
   if (form.elements.photo) {
-    data.photo =
-      await imageData(form.elements.photo.files[0]) ||
-      old?.photo ||
-      '';
+    const uploadedPhoto = await imageData(form.elements.photo.files[0]);
+    data.photo = uploadedPhoto || old?.photo || '';
+    if (collection === 'pets' && uploadedPhoto) data.imagePreference = 'photo';
   }
 
   if (collection === 'pets') {
@@ -7123,10 +7165,50 @@ async function action(actionName, id, element) {
     case 'owner-pet-photo': {
       const pet = find('pets', id);
 
-      if (!canPet(pet) || user.role !== 'owner') return;
+      if (!canPet(pet) || user?.role !== 'owner') return;
+
+      ownerPetImageModal(pet);
+      break;
+    }
+
+    case 'owner-pet-upload': {
+      const pet = find('pets', id);
+
+      if (!canPet(pet) || user?.role !== 'owner') return;
 
       ownerPhotoTargetId = id;
+      close();
       $('#owner-pet-photo-input')?.click();
+      break;
+    }
+
+    case 'owner-pet-avatar-pick': {
+      const [petId, avatarId] = id.split(':');
+      const pet = find('pets', petId);
+
+      if (!canPet(pet) || user?.role !== 'owner' || !findPetAvatar(avatarId)) return;
+
+      if (commit(() => {
+        pet.avatarId = avatarId;
+        pet.imagePreference = 'avatar';
+      })) {
+        close();
+        renderContent();
+        toast(`Ícono de ${pet.name} actualizado.`);
+      }
+      break;
+    }
+
+    case 'owner-pet-use-photo': {
+      const pet = find('pets', id);
+
+      if (!canPet(pet) || user?.role !== 'owner' || !pet.photo) return;
+
+      if (commit(() => { pet.imagePreference = 'photo'; })) {
+        close();
+        renderContent();
+        toast(`Foto de ${pet.name} actualizada.`);
+      }
       break;
     }
 
@@ -8153,6 +8235,7 @@ ui.on('change', event => {
     const file = element.files[0];
     const petId = ownerPhotoTargetId;
     element.value = '';
+    ownerPhotoTargetId = '';
 
     if (!file || !petId) return;
 
@@ -8164,11 +8247,16 @@ ui.on('change', event => {
       .then(photo => {
         if (!photo) return;
 
-        commit(() => {
-          pet.photo = photo;
-        });
+        const currentPet = find('pets', petId);
+        if (!canPet(currentPet) || user?.role !== 'owner') return;
 
-        renderContent();
+        if (commit(() => {
+          currentPet.photo = photo;
+          currentPet.imagePreference = 'photo';
+        })) {
+          renderContent();
+          toast(`Foto de ${currentPet.name} actualizada.`);
+        }
       })
       .catch(error => toast(error.message));
 
