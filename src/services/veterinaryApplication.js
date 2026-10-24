@@ -1,3 +1,4 @@
+import { createAttentionFacade } from './attentionFacade.js';
 import { populateSamplePractice } from './samplePractice.js';
 import { PET_AVATARS, findPetAvatar } from './petAvatars.js';
 
@@ -6681,334 +6682,35 @@ async function submitForm(form) {
         return fail('Mascota no disponible.');
       }
 
-      if (!data.reason?.trim()) {
-        return fail('Falta el motivo de consulta del ingreso. Pedí a Administración que lo cargue.');
-      }
-
-      // MODO VACUNA: el registro es también el ticket (automático).
-      // Lógica: no se pide medicación ni ticket manual; al guardar se
-      // crea la atención tipo Vacuna + ticket con los mismos datos +
-      // recordatorio de próxima aplicación. Así no se rellena dos veces.
-      const attTypeValue = String(data.attType || attendType || 'Consulta');
-
-      if (attTypeValue === 'Vacuna') {
-        const vaccineName = String(data.vaccineName || '').trim();
-        const vaccineType = String(data.vaccineType || '').trim();
-        const vaccineDose = String(data.vaccineDose || '').trim();
-        const vaccineLot = String(data.vaccineLot || '').trim();
-        const vaccineNext = String(data.vaccineNext || '').trim();
-
-        if (!vaccineName) return fail('Ingresá el nombre de la vacuna.');
-        if (!vaccineType) return fail('Ingresá el tipo de vacuna.');
-        if (!vaccineDose) return fail('Ingresá la dosis de la vacuna.');
-        if (!vaccineLot) return fail('Ingresá el lote de la vacuna.');
-        if (!vaccineNext) return fail('Ingresá la próxima aplicación de la vacuna.');
-
-        const vaccinePerformed =
-          `Vacuna: ${vaccineName} · Tipo: ${vaccineType} · Dosis: ${vaccineDose} · Lote: ${vaccineLot} · Próxima aplicación: ${pretty(vaccineNext)}`;
-
-        const vaccineTicketMeds = [{ name: vaccineName, quantity: vaccineDose }];
-
-        const time = new Date().toLocaleTimeString('es-AR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-
-        const ok = commit(() => {
-          db.tickets = db.tickets || [];
-
-          const weight = Number(data.weight) || pet.weight;
-
-          if (data.weight) {
-            pet.weight = weight;
-          }
-
-          if (existing) {
-            Object.assign(existing, {
-              type: 'Vacuna',
-              title: `Vacuna · ${vaccineName}`,
-              reason: data.reason.trim(),
-              diagnosis: data.reason.trim(),
-              info: vaccinePerformed,
-              performed: vaccinePerformed,
-              vaccineName,
-              vaccineType,
-              vaccineDose,
-              vaccineLot,
-              vaccineNext,
-              medications: [],
-              weight,
-              temperature: data.temperature || existing.temperature || ''
-            });
-
-            const linkedTicket = existing.ticketId
-              ? ticket(existing.ticketId)
-              : null;
-
-            if (linkedTicket) {
-              linkedTicket.reason = data.reason.trim();
-              linkedTicket.performed = vaccinePerformed;
-              linkedTicket.medications = vaccineTicketMeds;
-            }
-          } else {
-            const clinicalRecord = {
-              id: uid(),
-              petId: pet.id,
-              ownerId: pet.ownerId,
-              date: today(),
-              time,
-              type: 'Vacuna',
-              title: `Vacuna · ${vaccineName}`,
-              info: vaccinePerformed,
-              diagnosis: data.reason.trim(),
-              reason: data.reason.trim(),
-              performed: vaccinePerformed,
-              vaccineName,
-              vaccineType,
-              vaccineDose,
-              vaccineLot,
-              vaccineNext,
-              medications: [],
-              weight,
-              temperature: data.temperature || '',
-              vetId: user.vetId || null,
-              authorId: user.id,
-              authorName: user.name,
-              visible: true,
-              waitingEntryId: entry.id
-            };
-
-            db.clinical.push(clinicalRecord);
-
-            const newTicket = {
-              id: uid(),
-              number: 'T-' + Date.now().toString(36).toUpperCase(),
-              date: today(),
-              time,
-              petId: pet.id,
-              ownerId: pet.ownerId,
-              vetId: user.vetId || null,
-              vetName: user.name,
-              reason: data.reason.trim(),
-              performed: vaccinePerformed,
-              medications: vaccineTicketMeds,
-              services: [],
-              total: 0,
-              clinicalId: clinicalRecord.id,
-              waitingEntryId: entry.id,
-              status: 'Pendiente de cobro'
-            };
-
-            db.tickets.push(newTicket);
-
-            clinicalRecord.ticketId = newTicket.id;
-            entry.status = 'Pendiente de cobro';
-            entry.ticketId = newTicket.id;
-            entry.attentionId = clinicalRecord.id;
-
-          }
-
-          const vaccineClinicalId = existing ? existing.id : db.clinical[db.clinical.length - 1].id;
-
-          upsertCareReminder({
-            clinicalId: vaccineClinicalId,
-            pet,
-            category: 'Vacunación',
-            date: vaccineNext,
-            title: `Próxima vacuna ${vaccineName} · ${pet.name}`,
-            note: ''
-          });
-        });
-
-        if (ok) {
-          close();
-          navigate('dailyHistory');
-
-          toast(
-            existing
-              ? 'Vacuna actualizada. El ticket quedó para Administración.'
-              : 'Vacuna guardada. El ticket quedó para Administración y se programó la próxima aplicación.'
-          );
+      // TP2: el formulario entrega los datos a Facade y solo maneja la pantalla.
+      // La fachada coordina historia clínica, ticket, sala y recordatorio.
+      // Se crea con las dependencias actuales; la base se entrega en cada llamada.
+      const attentionFacade = createAttentionFacade({
+        commit, uid, today, pretty,
+        careCategories: CARE_CATEGORIES,
+        upsertCareReminder
+      });
+      const result = attentionFacade.registrarAtencion({
+        db, user, pet, entry, existing, data, attendType,
+        medicationFields: {
+          names: formData.getAll('med-name[]'),
+          doses: formData.getAll('med-dose[]'),
+          quantities: formData.getAll('med-quantity[]'),
+          routes: formData.getAll('med-route[]'),
+          notes: formData.getAll('med-notes[]')
         }
-        break;
-      }
-
-      const attObs = String(data.attObservations || '').trim();
-      const attProc = String(data.attProcedures || '').trim();
-      const attTreat = String(data.attTreatments || '').trim();
-      const attIndic = String(data.attIndications || '').trim();
-      const attRec = String(data.attRecommendations || '').trim();
-
-      if (!attObs && !attProc && !attTreat && !attIndic && !attRec) {
-        return fail('Completá al menos un ítem de la atención (observaciones, procedimientos, tratamientos, indicaciones o recomendaciones).');
-      }
-
-      const performedText = [
-        attObs ? `Observaciones: ${attObs}` : '',
-        attProc ? `Procedimientos: ${attProc}` : '',
-        attTreat ? `Tratamientos: ${attTreat}` : '',
-        attIndic ? `Indicaciones: ${attIndic}` : '',
-        attRec ? `Recomendaciones: ${attRec}` : ''
-      ].filter(Boolean).join('\n');
-
-      const names = formData.getAll('med-name[]');
-      const doses = formData.getAll('med-dose[]');
-      const quantities = formData.getAll('med-quantity[]');
-      const routes = formData.getAll('med-route[]');
-      const notes = formData.getAll('med-notes[]');
-
-      // Medicación completa: propia de la consulta (registra toda la info).
-      const medications = names
-        .map((name, index) => ({
-          name: (name || '').trim(),
-          dose: (doses[index] || '').trim(),
-          quantity: (quantities[index] || '').trim(),
-          route: (routes[index] || '').trim(),
-          notes: (notes[index] || '').trim()
-        }))
-        .filter(medication => medication.name);
-
-      // Ticket automático (igual que Vacuna): copia los mismos datos de
-      // Registrar atención (motivo + atención realizada + medicación
-      // completa con dosis, cantidad, vía y observaciones). No se vuelve
-      // a rellenar en un segundo formulario.
-      const ticketReason = data.reason.trim();
-
-      const ticketMeds = medications.map(medication => ({ ...medication }));
-
-      const time = new Date().toLocaleTimeString('es-AR', {
-        hour: '2-digit',
-        minute: '2-digit'
       });
 
-      const ok = commit(() => {
-        db.tickets = db.tickets || [];
-
-        const weight = Number(data.weight) || pet.weight;
-
-        if (data.weight) {
-          pet.weight = weight;
-        }
-
-        if (existing) {
-          // Corrige el registro y el ticket ya generados. NO se crea una
-          // segunda atención ni un segundo ticket (requisito 15).
-          Object.assign(existing, {
-            reason: data.reason.trim(),
-            performed: performedText,
-            info: performedText,
-            diagnosis: data.reason.trim(),
-            attObservations: attObs,
-            attProcedures: attProc,
-            attTreatments: attTreat,
-            attIndications: attIndic,
-            attRecommendations: attRec,
-            medications,
-            weight,
-            temperature: data.temperature || existing.temperature || ''
-          });
-
-          const linkedTicket = existing.ticketId
-            ? ticket(existing.ticketId)
-            : null;
-
-          if (linkedTicket) {
-            linkedTicket.reason = ticketReason;
-            linkedTicket.performed = existing.performed;
-            linkedTicket.medications = ticketMeds;
-          }
-        } else {
-          // Nueva atención: se crea a partir de un paciente de la sala
-          // de espera y se genera su ticket para Administración.
-          const clinicalRecord = {
-            id: uid(),
-            petId: pet.id,
-            ownerId: pet.ownerId,
-            date: today(),
-            time,
-            type: 'Consulta',
-            title: 'Consulta · Sala de espera',
-            info: performedText,
-            diagnosis: data.reason.trim(),
-            reason: data.reason.trim(),
-            performed: performedText,
-            attObservations: attObs,
-            attProcedures: attProc,
-            attTreatments: attTreat,
-            attIndications: attIndic,
-            attRecommendations: attRec,
-            medications,
-            weight,
-            temperature: data.temperature || '',
-            vetId: user.vetId || null,
-            authorId: user.id,
-            authorName: user.name,
-            visible: true,
-            waitingEntryId: entry.id
-          };
-
-          db.clinical.push(clinicalRecord);
-
-          const newTicket = {
-            id: uid(),
-            number: 'T-' + Date.now().toString(36).toUpperCase(),
-            date: today(),
-            time,
-            petId: pet.id,
-            ownerId: pet.ownerId,
-            vetId: user.vetId || null,
-            vetName: user.name,
-            reason: ticketReason,
-            performed: clinicalRecord.performed,
-            medications: ticketMeds,
-            services: [],
-            total: 0,
-            clinicalId: clinicalRecord.id,
-            waitingEntryId: entry.id,
-            status: 'Pendiente de cobro'
-          };
-
-          db.tickets.push(newTicket);
-
-          clinicalRecord.ticketId = newTicket.id;
-          entry.status = 'Pendiente de cobro';
-          entry.ticketId = newTicket.id;
-          entry.attentionId = clinicalRecord.id;
-        }
-
-        // Próximo cuidado: se refleja en el calendario del propietario.
-        // Si se deja la fecha vacía, se quita el que se había cargado antes.
-        const consultClinicalId = existing ? existing.id : db.clinical[db.clinical.length - 1].id;
-        const consultRecord = existing || db.clinical[db.clinical.length - 1];
-        const nextDate = String(data.nextDate || '').trim();
-        const nextCategory = CARE_CATEGORIES.some(entry => entry[0] === data.nextCategory)
-          ? data.nextCategory
-          : 'Control';
-        const nextNote = String(data.nextNote || '').trim();
-
-        consultRecord.nextDate = nextDate;
-        consultRecord.nextCategory = nextDate ? nextCategory : '';
-        consultRecord.nextNote = nextNote;
-
-        upsertCareReminder({
-          clinicalId: consultClinicalId,
-          pet,
-          category: nextCategory,
-          date: nextDate,
-          title: `${nextCategory} · ${pet.name}`,
-          note: nextNote
-        });
-      });
-
-      if (ok) {
+      if (result.ok) {
         close();
         navigate('dailyHistory');
-
-        toast(
-          existing
-            ? 'Atención actualizada correctamente.'
-            : 'Consulta guardada. El turno terminó y el ticket quedó para Administración.'
-        );
+        toast(result.isVaccine
+          ? (existing
+              ? 'Vacuna actualizada. El ticket quedó para Administración.'
+              : 'Vacuna guardada. El ticket quedó para Administración y se programó la próxima aplicación.')
+          : (existing
+              ? 'Atención actualizada correctamente.'
+              : 'Consulta guardada. El turno terminó y el ticket quedó para Administración.'));
       }
       break;
     }
