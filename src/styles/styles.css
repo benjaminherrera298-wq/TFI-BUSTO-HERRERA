@@ -269,9 +269,33 @@ dialog:has(.attend-layout),dialog:has(.attend-single){width:min(880px,calc(100% 
 .cal-note{margin-top:4px!important;color:var(--g-txt)!important}
 .cal-tag{display:inline-block;margin-top:7px;padding:2px 9px;border-radius:999px;font-size:10.5px;background:#ffffff1f;color:var(--g-txt)}
 .cal-tag.vet{background:rgba(167,139,250,.3)}
-.cal-tag.turno{background:rgba(96,165,250,.3)}
 .cal-item-actions{display:flex;gap:6px;flex-wrap:wrap}
 .cal-item-actions button{background:var(--g-bg);color:var(--g-txt);border-color:var(--g-line)}
 .cal-item-actions .danger{color:#fda4af}
 @media(max-width:1000px){.cal-shell{grid-template-columns:1fr;padding:16px}.cal-side{order:2}}
 @media(max-width:700px){.cal-cell{min-height:58px;padding:6px;align-items:center}.cal-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:3px}.cal-chip{padding:0;background:none}.cal-chip b{display:none}.cal-chip i{width:7px;height:7px}.cal-chips em{display:none}.cal-grid{gap:4px}.cal-grid-wrap{padding:10px}.cal-top{flex-wrap:wrap}.cal-item{flex-wrap:wrap}}
+
+/* Agenda personal de cada cuenta de administración y veterinaria. */
+.personal-agenda-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-bottom:24px}
+.personal-agenda-weekday{text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:8px 0}
+.personal-agenda-cell{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;min-height:104px;padding:10px;text-align:left;background:var(--bg);overflow:hidden}
+.personal-agenda-cell>b{font-size:13px}
+.personal-agenda-cell.outside{opacity:.5}
+.personal-agenda-cell.today>b{color:var(--primary);text-decoration:underline;text-underline-offset:4px}
+.personal-agenda-cell[aria-pressed="true"]{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.personal-agenda-chip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--line);border-radius:5px;padding:4px;font-size:11px;font-weight:500}
+.personal-agenda-chip.is-done{text-decoration:line-through;opacity:.7}
+.personal-agenda-entry{padding:18px;border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:12px;margin-top:12px;overflow-wrap:anywhere}
+.personal-agenda-entry h3{margin:0;flex:1;min-width:0}
+.personal-agenda-entry .muted{font-size:12px;margin:8px 0}
+.personal-agenda-entry.is-done{border-left-color:var(--muted)}
+.personal-agenda-entry.is-done h3{text-decoration:line-through}
+.personal-agenda-text{white-space:pre-wrap}
+.personal-agenda-day{min-width:0}
+.personal-agenda-day> .row h2{font-size:17px;margin:0}
+.personal-agenda-week{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.personal-agenda-week .personal-agenda-day{padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.personal-agenda-week .personal-agenda-day> .row{align-items:flex-start}
+.personal-agenda-week .personal-agenda-day h2{font-size:14px}
+.personal-agenda-week .personal-agenda-entry{background:var(--white)}
+@media(max-width:700px){.personal-agenda-calendar{gap:4px}.personal-agenda-cell{min-height:76px;padding:6px;gap:4px}.personal-agenda-chip{font-size:10px;padding:3px}.personal-agenda-week{grid-template-columns:1fr}.personal-agenda-entry{padding:12px}.personal-agenda-cell small{font-size:9px}}

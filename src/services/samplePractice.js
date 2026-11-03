@@ -7,7 +7,7 @@ export function populateSamplePractice(db, reference = new Date()) {
     return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
   };
   const stamp = (day, time) => new Date(`${day}T${time}:00`).toISOString();
-  const collections = ['owners', 'pets', 'appointments', 'clinical', 'tickets', 'waitingRoom', 'reminders', 'products', 'notices'];
+  const collections = ['owners', 'pets', 'clinical', 'tickets', 'waitingRoom', 'reminders', 'products', 'notices'];
   collections.forEach(key => { db[key] ||= []; });
   const vets = db.vets.filter(vet => vet.active);
   const services = db.services.filter(service => service.active);
@@ -51,9 +51,6 @@ export function populateSamplePractice(db, reference = new Date()) {
       const time = `${String(9 + i % 7).padStart(2, '0')}:00`;
       const reason = reasons[(i + visit) % reasons.length];
       const total = 16000 + (i % 4) * 2500;
-      db.appointments.push({ id: `${id}-appointment`, petId: pet.id, ownerId: pet.ownerId,
-        vetId: vet.id, serviceId: services[0].id, date: day, time, duration: 30,
-        status: 'Atendido', reason, observations: 'Atención registrada en historia clínica.' });
       db.clinical.push({ id, petId: pet.id, ownerId: pet.ownerId, vetId: vet.id,
         authorId: author?.id, authorName: vet.name, date: day, time, type: 'Consulta', title: reason,
         reason, diagnosis: visit ? 'Evolución favorable en control de seguimiento' : 'Evaluación preventiva',
@@ -66,14 +63,6 @@ export function populateSamplePractice(db, reference = new Date()) {
         reason, performed: 'Consulta y control clínico', medications: [], services: [],
         serviceAmount: total, total, clinicalId: id, status: 'Pagado', paidAt: stamp(day, time) });
     });
-    let offset = i % 10;
-    const openDays = (db.config.days || [1, 2, 3, 4, 5, 6]).map(Number);
-    if (!openDays.length) return;
-    while (!openDays.includes(new Date(`${date(offset)}T12:00:00`).getDay())) offset++;
-    const time = `${String(9 + Math.floor(i / vets.length) % 7).padStart(2, '0')}:${i % 2 ? '30' : '00'}`;
-    db.appointments.push({ id: `sample-upcoming-${i}`, petId: pet.id, ownerId: pet.ownerId,
-      vetId: vet.id, serviceId: services[0].id, date: date(offset), time, duration: 30,
-      status: i % 3 ? 'Confirmado' : 'Pendiente', reason: reasons[i % reasons.length], observations: '' });
     db.reminders.push({ id: `sample-reminder-${i}`, petId: pet.id,
       title: `Control preventivo de ${pet.name}`, date: date(5 + i), done: false, category: 'Control', source: 'vet' });
   });
@@ -105,8 +94,8 @@ export function populateSamplePractice(db, reference = new Date()) {
       description: 'Producto de ejemplo disponible en recepción.', price: [22000, 24500, 8500, 12000, 9500, 6500][i],
       stock: [18, 12, 7, 9, 3, 15][i], active: true, photo: '' });
   });
-  db.notices.push({ id: 'sample-notice', title: 'Controles preventivos con turno',
-    message: 'Reservá tu próxima consulta desde la agenda o comunicate con recepción.', date: date(-3), expires: date(30), active: true });
+  db.notices.push({ id: 'sample-notice', title: 'Controles preventivos',
+    message: 'Acercate a la veterinaria o comunicate con recepción para consultar por los controles de tu mascota.', date: date(-3), expires: date(30), active: true });
   db.samplePracticeVersion = 1;
   return true;
 }

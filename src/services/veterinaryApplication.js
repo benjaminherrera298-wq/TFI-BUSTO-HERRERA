@@ -126,12 +126,6 @@ const pretty = date => date
     })
   : '—';
 
-const minutes = time =>
-  Number(time.split(':')[0]) * 60 + Number(time.split(':')[1]);
-
-const clock = value =>
-  `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
-
 const money = value =>
   Number(value || 0).toLocaleString('es-AR', {
     style: 'currency',
@@ -170,7 +164,7 @@ function applyTheme(theme) {
   const meta = document.querySelector('meta[name="theme-color"]');
 
   if (meta) {
-    meta.content = theme === 'dark' ? '#0B1226' : '#1F2E5A';
+    meta.content = theme === 'dark' ? '#142C37' : '#183E49';
   }
 
   $$('[data-action="theme"]').forEach(element => {
@@ -235,9 +229,10 @@ const navs = {
 
 const allowed = {
   admin: Object.keys(navs).filter(key =>
-    key !== 'reminders' && key !== 'owners' && key !== 'dailyHistory'
+    key !== 'reminders' && key !== 'owners' && key !== 'dailyHistory' &&
+    key !== 'services' && key !== 'notifications' && key !== 'notices'
   ),
-  superadmin: Object.keys(navs),
+  superadmin: Object.keys(navs).filter(key => key !== 'notices'),
   vet: [
     'home',
     'pets',
@@ -265,8 +260,7 @@ let page = 1;
 let query = '';
 let filter = '';
 let agendaDate = today();
-let agendaMode = 'day';
-let agendaVet = '';
+let agendaMode = 'month';
 
 // --- Calendario del propietario (Agenda) ---
 let ownerCalMonth = today().slice(0, 7);
@@ -289,7 +283,7 @@ let ownerPhotoTargetId = '';
 
 const paths = {
   home: 'M3 10 12 3l9 7v11h-6v-7H9v7H3z',
-  pet: 'M8 13c-2 1-5 6-1 7 2 1 3-1 5-1s3 2 5 1c4-1 1-6-1-7-2-2-6-2-8 0M5 7v2M10 4v3M15 4v3M20 7v2',
+  pet: 'M8.5 14c-1.3 1-3.5 3-3.5 4.5S6 21 7.5 21c1.7 0 2.6-1 4.5-1s2.8 1 4.5 1c1.5 0 2.5-1 2.5-2.5S16.8 15 15.5 14a5.5 5.5 0 0 0-7 0ZM5 7v3M10 3v4M15 3v4M20 7v3',
   users: 'M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M18 3a4 4 0 0 1 0 8M22 21v-3a4 4 0 0 0-3-4',
   medical: 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z',
   calendar: 'M4 5h16v16H4zM7 3v4M17 3v4M4 10h16M8 14h2M14 14h2M8 18h2',
@@ -519,6 +513,23 @@ function load() {
   if (db.configured) {
     db.waitingRoom = db.waitingRoom || [];
     db.tickets = db.tickets || [];
+    db.agendaNotes = Array.isArray(db.agendaNotes) ? db.agendaNotes : [];
+
+    // Actualiza solo textos de demostración del antiguo sistema de reservas.
+    (db.services || []).forEach(service => {
+      if (service.description === 'Atención con turno previo.') {
+        service.description = 'Atención en la veterinaria.';
+      }
+    });
+    (db.notices || []).forEach(notice => {
+      if (notice.id === 'sample-notice' && notice.title === 'Controles preventivos con turno') {
+        notice.title = 'Controles preventivos';
+        notice.message = 'Acercate a la veterinaria o comunicate con recepción para consultar por los controles de tu mascota.';
+      }
+      if (notice.message === 'Ya podés consultar la información de tus mascotas y solicitar turnos desde tu cuenta.') {
+        notice.message = 'Ya podés consultar la información de tus mascotas y sus próximos cuidados desde tu cuenta.';
+      }
+    });
 
     // Migración: los tickets generados antes del monto a cobrar pueden no
     // tener `total`; se inicializa en 0 (se muestra como "A definir").
@@ -761,7 +772,7 @@ function seed(config, admin) {
     id: 's' + (index + 1),
     name,
     duration: 30,
-    description: 'Atención con turno previo.',
+    description: 'Atención en la veterinaria.',
     active: true
   }));
 
@@ -795,61 +806,6 @@ function seed(config, admin) {
     });
   });
 
-  let wednesday = today();
-
-  while (
-    new Date(wednesday + 'T12:00:00').getDay() !== 3
-  ) {
-    wednesday = addDays(wednesday, 1);
-  }
-
-  const appointments = [
-    {
-      id: uid(),
-      petId: 'p1',
-      ownerId: 'o1',
-      serviceId: 's2',
-      vetId: 'v1',
-      date: wednesday,
-      time: '09:30',
-      duration: 30,
-      status: 'Confirmado',
-      reason: 'Control por imágenes',
-      observations: ''
-    },
-    {
-      id: uid(),
-      petId: 'p2',
-      ownerId: 'o1',
-      serviceId: 's2',
-      vetId: 'v1',
-      date: wednesday,
-      time: '11:00',
-      duration: 30,
-      status: 'Confirmado',
-      reason: 'Estudio abdominal',
-      observations: ''
-    }
-  ];
-
-  if (config.days.map(Number).includes(new Date().getDay())) {
-    ['09:00', '10:30', '12:00'].forEach((time, index) => {
-      appointments.push({
-        id: uid(),
-        petId: 'p' + (index + 4),
-        ownerId: index === 2 ? 'o3' : 'o2',
-        serviceId: 's1',
-        vetId: 'v2',
-        date: today(),
-        time,
-        duration: 30,
-        status: index === 0 ? 'Atendido' : 'Confirmado',
-        reason: 'Consulta general',
-        observations: ''
-      });
-    });
-  }
-
   return {
     configured: true,
     config,
@@ -874,7 +830,6 @@ function seed(config, admin) {
     pets,
     services,
     schedules,
-    appointments,
 
     clinical: pets.map(pet => ({
       id: uid(),
@@ -928,23 +883,15 @@ function seed(config, admin) {
       {
         id: uid(),
         title: 'Bienvenidos a nuestro espacio de cuidado',
-        message: 'Ya podés consultar la información de tus mascotas y solicitar turnos desde tu cuenta.',
+        message: 'Ya podés consultar la información de tus mascotas y sus próximos cuidados desde tu cuenta.',
         date: today(),
         expires: '',
         active: true
       }
     ],
 
-    notifications: [
-      {
-        id: uid(),
-        message: 'Tu turno de ecografía fue confirmado.',
-        ownerId: 'o1',
-        vetId: 'v1',
-        date: new Date().toISOString(),
-        readBy: []
-      }
-    ],
+    notifications: [],
+    agendaNotes: [],
 
     reminders: [
       {
@@ -1055,7 +1002,7 @@ function clinicFields(config = {}) {
     ) +
     field(
       'duration',
-      'Duración predeterminada (minutos)',
+      'Duración estimada de atención (minutos)',
       config.duration || 30,
       'number',
       'min="5" max="240" required'
@@ -1518,28 +1465,13 @@ function pendingTickets() {
     );
 }
 
-function todayAppointmentsForVet() {
-  return appts()
-    .filter(appointment =>
-      appointment.date === today() &&
-      appointment.status !== 'Cancelado'
-    )
-    .sort((a, b) => minutes(a.time) - minutes(b.time));
-}
-
-function appts() {
-  return db.appointments.filter(appointment =>
-    isAdmin() ||
-    (user.role === 'vet' && appointment.vetId === user.vetId) ||
-    (user.role === 'owner' && appointment.ownerId === user.ownerId)
-  );
-}
-
 function notifications() {
   return db.notifications.filter(notification =>
-    isAdmin() ||
-    (user.role === 'vet' && notification.vetId === user.vetId) ||
-    (user.role === 'owner' && notification.ownerId === user.ownerId)
+    !/\bturnos?\b/i.test(notification.message) && (
+      isAdmin() ||
+      (user.role === 'vet' && notification.vetId === user.vetId) ||
+      (user.role === 'owner' && notification.ownerId === user.ownerId)
+    )
   );
 }
 
@@ -1559,13 +1491,39 @@ function shell() {
     route = user.role === 'owner' ? 'pets' : 'home';
   }
 
+  const firstName = user.name.trim().split(/\s+/)[0] || roleNames[user.role];
+  const accountLabel = firstName.slice(0, 2);
+  const panelLabel = user.role === 'superadmin'
+    ? 'Superadministración · Acceso total'
+    : isAdmin()
+      ? 'Panel administrativo'
+      : user.role === 'vet'
+        ? 'Espacio profesional'
+        : 'Portal del propietario';
+
   ui.setHtml($('#app'), `
+    <div class="application-shell">
     <aside class="sidebar">
-      ${branding()}
+      <div class="sidebar-profile-wrap">
+        <button type="button" class="sidebar-profile" data-action="account"
+          aria-label="Abrir menú de cuenta de ${esc(user.name)}" aria-expanded="false">
+          <span class="sidebar-avatar" aria-hidden="true">
+            ${db.config.logo
+              ? `<img src="${esc(db.config.logo)}" alt="">`
+              : esc(accountLabel)}
+          </span>
+          <span class="sidebar-identity">
+            <strong>${esc(user.name)}</strong>
+            <span class="sidebar-email">${esc(user.email)}</span>
+            <span class="sidebar-role">${esc(roleNames[user.role])}</span>
+          </span>
+        </button>
+        <button type="button" class="ghost sidebar-close" data-action="menu" aria-label="Cerrar menú">✕</button>
+      </div>
 
       <div class="eyebrow">Tu espacio de trabajo</div>
 
-      <nav>
+      <nav aria-label="Menú principal">
         ${allowed[user.role]
           .filter(key => navs[key])
           .map(key => `
@@ -1573,12 +1531,13 @@ function shell() {
               class="nav-item ${route === key ? 'active' : ''}"
               data-action="nav"
               data-id="${key}"
+              ${route === key ? 'aria-current="page"' : ''}
             >
               ${icon(navs[key][1])}
               ${
                 user.role === 'owner' && key === 'pets'
                   ? 'Mis mascotas'
-                  : user.role === 'vet' && key === 'agenda'
+                  : canUsePersonalAgenda() && key === 'agenda'
                     ? 'Mi agenda'
                     : navs[key][0]
               }
@@ -1588,77 +1547,42 @@ function shell() {
       </nav>
 
       <footer>
-        <div class="hint">
-          ${roleNames[user.role]}
-          <br>
-          <small>Sesión de demostración</small>
-        </div>
-
         ${button(
           icon('logout') + ' Cerrar sesión',
           'logout',
           '',
-          'ghost'
+          'ghost sidebar-logout'
         )}
-
-        <div class="footer-note">
-          Gestión veterinaria<br>
-          Organización que acompaña.
-        </div>
       </footer>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
-        <div class="row">
-          ${button(icon('menu'), 'menu', '', 'ghost menu-toggle')}
-          ${branding()}
-
-          <span class="role-label muted">
-            ${
-              user.role === 'superadmin'
-                ? 'Superadministración · Acceso total'
-                : isAdmin()
-                  ? 'Panel administrativo'
-                  : user.role === 'vet'
-                    ? 'Espacio profesional'
-                    : 'Portal del propietario'
-            }
-          </span>
+        <div class="topbar-intro">
+          <button type="button" class="ghost menu-toggle" data-action="menu" aria-label="Abrir menú principal">${icon('menu')}</button>
+          <div class="topbar-greeting">
+            <h2>Hola, ${esc(firstName)}</h2>
+            <p>${panelLabel}</p>
+          </div>
         </div>
 
-        <div class="row">
+        <div class="topbar-actions">
           ${themeButton('ghost')}
 
           ${
             allowed[user.role].includes('notifications')
-              ? button(
-                icon('bell') + ` <span class="badge">${unread()}</span>`,
-                'nav',
-                'notifications',
-                'ghost'
-              )
+              ? `<button type="button" class="ghost notification-button" data-action="nav" data-id="notifications"
+                  aria-label="Notificaciones: ${unread()} sin leer">
+                  ${icon('bell')}<span class="notification-count">${unread()}</span>
+                </button>`
               : ''
           }
 
-          <span class="user-name">${esc(user.name)}</span>
-
-          ${button(
-            esc(
-              user.name
-                .split(' ')
-                .map(part => part[0])
-                .slice(0, 2)
-                .join('')
-            ),
-            'account',
-            '',
-            'avatar'
-          )}
         </div>
       </header>
 
       <main id="content" class="content"></main>
+    </div>
     </div>
   `);
 
@@ -1666,6 +1590,7 @@ function shell() {
 }
 
 function navigate(nextRoute, id) {
+  if (nextRoute === 'notices' && isAdmin()) nextRoute = 'settings';
   route = nextRoute;
   query = '';
   filter = '';
@@ -1736,34 +1661,6 @@ function table(headers, rows) {
   `;
 }
 
-function appointmentTable(list) {
-  return table(
-    [
-      'Hora / fecha',
-      'Mascota',
-      'Propietario',
-      'Servicio',
-      'Profesional',
-      'Estado',
-      ''
-    ],
-    list.map(appointment => [
-      `${esc(appointment.time)}<br><small>${pretty(appointment.date)}</small>`,
-      button(
-        esc(label('pets', appointment.petId)),
-        'pet',
-        appointment.petId,
-        'ghost small'
-      ),
-      esc(label('owners', appointment.ownerId)),
-      esc(label('services', appointment.serviceId)),
-      esc(label('vets', appointment.vetId)),
-      badge(appointment.status),
-      button('Ver detalle', 'appointment', appointment.id, 'small')
-    ])
-  );
-}
-
 // DASHBOARD
 
 function home() {
@@ -1807,7 +1704,7 @@ function home() {
   ` +
     (isAdmin() ? homeWaitingRoom() + homeTicketsToCharge() : '') +
     (user.role === 'vet' ? homeVetWaitingRoom() : '') +
-    ((user.role === 'vet' || user.role === 'superadmin') ? homeVetAgenda() : '');
+    (canUsePersonalAgenda() ? homePersonalAgenda() : '');
 }
 
 function homeWaitingRoom() {
@@ -2025,30 +1922,21 @@ function homeVetWaitingRoom() {
   `;
 }
 
-function homeVetAgenda() {
-  const list = todayAppointmentsForVet();
-
+function homePersonalAgenda() {
+  const upcoming = personalAgendaEntries().filter(entry => !entry.done && entry.date >= today()).slice(0, 4);
   return `
     <section class="card">
-      <h2>Mis próximos turnos</h2>
-
-      ${
-        list.length
-          ? list.map(appointment => `
-              <article class="timeline">
-                <div class="row between">
-                  <b>${esc(appointment.time)} · ${esc(label('pets', appointment.petId))}</b>
-                  ${badge(appointment.status)}
-                </div>
-
-                <p class="muted">
-                  ${esc(label('owners', appointment.ownerId))} ·
-                  ${esc(label('services', appointment.serviceId))}
-                </p>
-              </article>
-            `).join('')
-          : '<p class="muted">No tenés turnos agendados para hoy.</p>'
-      }
+      <div class="row between">
+        <h2>Mis próximos recordatorios</h2>
+        ${button('Ver mi agenda', 'nav', 'agenda', 'small')}
+      </div>
+      ${upcoming.map(entry => `
+        <article class="timeline">
+          <b>${esc(entry.title)}</b>
+          <p class="muted">${pretty(entry.date)} · ${esc(entry.time || 'Todo el día')}</p>
+          ${button('Ver anotación', 'agenda-open', entry.id, 'small')}
+        </article>
+      `).join('') || '<p class="muted">No tenés recordatorios pendientes. Agregá una anotación en tu agenda.</p>'}
     </section>
   `;
 }
@@ -2113,24 +2001,18 @@ function matches(item) {
 
 // MASCOTAS Y PERFILES
 
-// Paleta pastel para las tarjetas del propietario, en la misma gama
-// fría de la página (Midnight Denim / Lavender Bloom: #1F2E5A,
-// #445A8C, #6B7FA6, #A2ADC7, #D7DCEA, #EDEFF7).
-// Sirven para identificar a simple vista (p. ej. rosa = hembra,
-// celeste = macho). Son todos fondos CLAROS para que el texto oscuro
-// (#1F2E5A, forzado por CSS con .has-color) siempre se lea, en modo
-// claro y en modo oscuro.
-// Exclusivo de esta vista: no reemplaza ni interfiere con pet.color
-// (color físico del pelaje, usado por otras pantallas/roles).
+// Variantes claras de la gama petróleo. Los IDs conservan las elecciones
+// guardadas; cada tarjeta mantiene texto oscuro legible en ambos temas.
+// No modifica pet.color, que describe el pelaje del animal.
 const OWNER_CARD_COLORS = [
-  { id: 'pink', name: 'Rosa pastel (hembra)', value: '#F4A7C0' },
-  { id: 'sky', name: 'Celeste pastel (macho)', value: '#9ED2F0' },
-  { id: 'blue', name: 'Azul pastel', value: '#A3BDF3' },
-  { id: 'lilac', name: 'Lila pastel', value: '#C4ADEF' },
-  { id: 'red', name: 'Rojo coral pastel', value: '#F2A89B' },
-  { id: 'green', name: 'Verde menta pastel', value: '#9BDCB8' },
-  { id: 'sand', name: 'Vainilla pastel', value: '#F3D894' },
-  { id: 'gray', name: 'Gris perla', value: '#C6CDD9' }
+  { id: 'pink', name: 'Bruma de agua', value: '#BCD8D7' },
+  { id: 'sky', name: 'Celeste agua', value: '#B5D5DE' },
+  { id: 'blue', name: 'Azul niebla', value: '#A9C6D1' },
+  { id: 'lilac', name: 'Azul humo', value: '#BECFD8' },
+  { id: 'red', name: 'Acero suave', value: '#ADBFC6' },
+  { id: 'green', name: 'Verde salvia', value: '#B8D2C8' },
+  { id: 'sand', name: 'Niebla de mar', value: '#D0DEDA' },
+  { id: 'gray', name: 'Gris azulado', value: '#C8D6DB' }
 ];
 
 function ownerCardColorValue(id) {
@@ -2195,7 +2077,7 @@ function petsView() {
   if (user.role === 'owner') {
     return heading(
       '¿Con qué mascota querés ingresar?',
-      'Seleccioná un perfil para consultar sus cuidados y próximos turnos.'
+      'Seleccioná un perfil para consultar sus cuidados e historia clínica.'
     ) + `
       <input
         type="file"
@@ -2399,13 +2281,10 @@ function petProfile() {
       'Tratamientos',
       'Desparasitación',
       'Pipetas',
-      'Estudios',
-      'Turnos'
+      'Estudios'
     ];
 
-  if (user.role === 'vet' && (petTab === 'Resumen' || petTab === 'Turnos')) {
-    petTab = 'Historia clínica';
-  }
+  if (!tabs.includes(petTab)) petTab = tabs[0];
 
   const category = {
     Vacunas: 'Vacuna',
@@ -2523,14 +2402,6 @@ function petProfile() {
         </aside>
       </div>
     `;
-  } else if (petTab === 'Turnos') {
-    content = `
-      <section class="card">
-        ${appointmentTable(
-          appts().filter(appointment => appointment.petId === pet.id)
-        )}
-      </section>
-    `;
   } else {
     content = `
       <section class="card">
@@ -2577,8 +2448,7 @@ function petProfile() {
   return heading(
     esc(pet.name),
     `${esc(pet.species)} · ${esc(pet.breed)} · ${esc(pet.sex)} · ${age} años · ${esc(pet.weight)} kg`,
-    button('Cambiar mascota', 'nav', 'pets') +
-    (isAdmin() ? button('Solicitar turno', 'book', pet.id, 'primary') : '')
+    button('Cambiar mascota', 'nav', 'pets')
   ) + `
     <section class="card">
       <div class="row between">
@@ -2942,8 +2812,7 @@ function vetProfile() {
   return heading(
     esc(vet.name),
     `${esc(vet.license)} · ${esc(vet.specialty)}`,
-    button('Editar / asignar servicios', 'edit', 'vets:' + vet.id) +
-    button('Ver agenda', 'vet-agenda', vet.id, 'primary')
+    button('Editar / asignar servicios', 'edit', 'vets:' + vet.id)
   ) + `
     <section class="card">
       <h2>Servicios y disponibilidad</h2>
@@ -2967,7 +2836,7 @@ function vetProfile() {
 
 // Vista de solo lectura (Propietario): horario general de la veterinaria
 // + horarios de atención de cada especialista. Sin alta, edición ni
-// activación: solo consulta para saber cuándo acercarse o pedir turno.
+// activación: solo consulta para saber cuándo acercarse.
 function ownerSchedulesView() {
   const openDays = (db.config.days || []).map(Number).sort((a, b) => a - b);
   // Atenciones especiales: días de ecos (Ecografía) o de operaciones
@@ -3098,9 +2967,8 @@ function schedulesView() {
     button('+ Nueva franja', 'create', 'schedules', 'primary')
   ) + `
     <div class="hint">
-      La agenda calcula los turnos usando estas franjas,
-      los días de apertura y las reservas existentes.
-      Ecografía demo: miércoles de 09:00 a 13:00 con Lucía Martínez.
+      Estas franjas indican los horarios habituales de atención de cada profesional.
+      Las notas y recordatorios personales se guardan desde Mi agenda.
     </div>
 
     <section class="card">
@@ -3111,113 +2979,21 @@ function schedulesView() {
   `;
 }
 
-/*
-  Disponibilidad mediante intervalos [inicio, fin).
-  Una reserva bloquea al profesional en todos sus servicios.
-  También se evitan superposiciones de turnos de la misma mascota.
-*/
-function slots(serviceId, vetId, date, petId = '', exclude = '') {
-  const service = find('services', serviceId);
-  const vet = find('vets', vetId);
-
-  if (
-    !service?.active ||
-    !vet?.active ||
-    !vet.serviceIds.includes(serviceId) ||
-    date < today()
-  ) {
-    return [];
-  }
-
-  const day = new Date(date + 'T12:00:00').getDay();
-
-  if (!db.config.days.map(Number).includes(day)) {
-    return [];
-  }
-
-  const result = [];
-
-  db.schedules
-    .filter(schedule =>
-      schedule.active &&
-      schedule.vetId === vetId &&
-      schedule.serviceId === serviceId &&
-      Number(schedule.day) === day
-    )
-    .forEach(schedule => {
-      const duration =
-        Number(schedule.duration) ||
-        Number(service.duration) ||
-        Number(db.config.duration);
-
-      const start = Math.max(
-        minutes(schedule.start),
-        minutes(db.config.start)
-      );
-
-      const end = Math.min(
-        minutes(schedule.end),
-        minutes(db.config.end)
-      );
-
-      for (
-        let time = start;
-        time + duration <= end;
-        time += duration
-      ) {
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-        if (date === today() && time <= currentMinutes) {
-          continue;
-        }
-
-        const busy = db.appointments.some(appointment =>
-          appointment.id !== exclude &&
-          appointment.date === date &&
-          appointment.status !== 'Cancelado' &&
-          (
-            appointment.vetId === vetId ||
-            (petId && appointment.petId === petId)
-          ) &&
-          time < minutes(appointment.time) + Number(appointment.duration) &&
-          time + duration > minutes(appointment.time)
-        );
-
-        if (
-          !busy &&
-          !result.some(slot => slot.time === clock(time))
-        ) {
-          result.push({
-            time: clock(time),
-            duration
-          });
-        }
-      }
-    });
-
-  return result.sort((a, b) => a.time.localeCompare(b.time));
-}
-
-
 // CALENDARIO DE CUIDADOS (AGENDA DEL PROPIETARIO)
 // Categorías de los puntos de colores. Los recordatorios que carga el
 // veterinario desde el historial clínico y los que agrega el propietario
 // comparten la misma colección (db.reminders) y se ven en el mismo calendario.
 
 const CARE_CATEGORIES = [
-  ['Vacunación', '#a78bfa'],
-  ['Desparasitación', '#34d399'],
-  ['Pipeta', '#f472b6'],
-  ['Operación', '#fb923c'],
-  ['Control', '#facc15'],
-  ['Otro', '#94a3b8']
+  ['Vacunación', '#99c6cb'],
+  ['Desparasitación', '#76bca9'],
+  ['Pipeta', '#7ab2c6'],
+  ['Operación', '#b5cfd1'],
+  ['Control', '#88aabd'],
+  ['Otro', '#9cafb8']
 ];
 
-const CAL_TURNO_COLOR = '#60a5fa';
-
 function careColor(category) {
-  if (category === 'Turno') return CAL_TURNO_COLOR;
   return (CARE_CATEGORIES.find(item => item[0] === category) || CARE_CATEGORIES[5])[1];
 }
 
@@ -3294,7 +3070,7 @@ function calMonthLabel(ym) {
 
 function ownerCalItems() {
   // Agenda del propietario: solo cuidados (recordatorios del
-  // veterinario + propios). Los turnos (punto azul) no van acá.
+  // veterinario + propios).
   const items = reminderList().map(reminder => ({
     kind: reminder.source === 'owner' ? 'owner' : 'vet',
     id: reminder.id,
@@ -3325,23 +3101,6 @@ function ownerAgendaView() {
   const now = today();
   const days = calMonthDays(ownerCalMonth);
   const weekdays = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
-
-  const mini = days.map(date => {
-    const dots = (byDate[date] || [])
-      .slice(0, 3)
-      .map(item => `<i style="--c:${careColor(item.category)}"></i>`)
-      .join('');
-
-    return `
-      <button
-        type="button"
-        class="cal-mini-day ${date.slice(0, 7) !== ownerCalMonth ? 'out' : ''} ${date === now ? 'today' : ''} ${date === ownerCalSelected ? 'selected' : ''}"
-        data-action="cal-day"
-        data-id="${date}"
-        aria-label="${esc(pretty(date))}"
-      >${Number(date.slice(8))}<span class="cal-mini-dots">${dots}</span></button>
-    `;
-  }).join('');
 
   const cells = days.map(date => {
     const list = byDate[date] || [];
@@ -3388,9 +3147,7 @@ function ownerAgendaView() {
   const detail = selectedItems.map(item => {
     const origin = item.kind === 'owner'
       ? '<span class="cal-tag">Agregado por vos</span>'
-      : item.kind === 'vet'
-        ? `<span class="cal-tag vet">Indicado por ${esc(item.by || 'tu veterinaria')}</span>`
-        : '<span class="cal-tag turno">Turno</span>';
+      : `<span class="cal-tag vet">Indicado por ${esc(item.by || 'tu veterinaria')}</span>`;
 
     return `
       <article class="cal-item" style="--c:${careColor(item.category)}">
@@ -3401,7 +3158,7 @@ function ownerAgendaView() {
             ${esc(label('pets', item.petId))} · ${esc(item.category)}${item.time ? ' · ' + esc(item.time) : ''}
             ${item.done ? ' · Completado' : ''}
           </p>
-          ${item.note && item.kind !== 'turno' ? `<p class="cal-note">${esc(item.note)}</p>` : ''}
+          ${item.note ? `<p class="cal-note">${esc(item.note)}</p>` : ''}
           ${origin}
         </div>
         ${item.kind === 'owner' ? `
@@ -3417,24 +3174,6 @@ function ownerAgendaView() {
   return `
     <div class="cal-shell">
       <aside class="cal-side">
-        <div class="cal-brand">
-          <span class="cal-logo">${icon('calendar')}</span>
-          <strong>Agenda de cuidados</strong>
-        </div>
-
-        <div class="cal-mini-head">
-          <span>${esc(calMonthLabel(ownerCalMonth))}</span>
-          <span>
-            <button type="button" class="cal-nav" data-action="cal-prev" aria-label="Mes anterior">‹</button>
-            <button type="button" class="cal-nav" data-action="cal-next" aria-label="Mes siguiente">›</button>
-          </span>
-        </div>
-
-        <div class="cal-mini">
-          ${['D', 'L', 'M', 'M', 'J', 'V', 'S'].map(day => `<span class="cal-mini-wd">${day}</span>`).join('')}
-          ${mini}
-        </div>
-
         <h4 class="cal-h4">Próximos</h4>
         <div class="cal-ups">${upcoming}</div>
 
@@ -3542,339 +3281,132 @@ function ownerReminderForm(reminderId = '', presetDate = '') {
   );
 }
 
-function agendaView() {
-  if (user.role === 'owner') return ownerAgendaView();
+// AGENDA PERSONAL (ADMINISTRADOR, VETERINARIO Y SUPERADMIN)
+// Cada anotación pertenece a una cuenta; no reserva atención ni crea cuidados de mascotas.
+function canUsePersonalAgenda() {
+  return !!user && ['admin', 'vet', 'superadmin'].includes(user.role);
+}
 
-  const list = appts().filter(appointment =>
-    !agendaVet || appointment.vetId === agendaVet
+function personalAgendaEntries() {
+  if (!canUsePersonalAgenda()) return [];
+  return db.agendaNotes.filter(entry => entry.userId === user.id).slice().sort((a, b) =>
+    a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || a.title.localeCompare(b.title)
   );
+}
 
-  let body;
+function personalAgendaEntry(id) {
+  return personalAgendaEntries().find(entry => entry.id === id);
+}
 
-  if (agendaMode === 'day') {
-    body = appointmentTable(
-      list
-        .filter(appointment => appointment.date === agendaDate)
-        .sort((a, b) => a.time.localeCompare(b.time))
-    );
-  } else {
-    const day = new Date(agendaDate + 'T12:00:00').getDay();
-    const monday = addDays(agendaDate, -((day + 6) % 7));
+function validAgendaDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number(value.slice(0, 4)) >= 1000 &&
+    localDate(new Date(value + 'T12:00:00')) === value;
+}
 
-    body = `
-      <div class="week">
-        ${Array.from({ length: 7 }, (_, index) => {
-          const date = addDays(monday, index);
+function agendaNoteForm(id = '') {
+  if (!canUsePersonalAgenda()) return;
+  const entry = id ? personalAgendaEntry(id) : null;
+  if (id && !entry) return;
+  modal(entry ? 'Editar anotación' : 'Nueva anotación',
+    '<p class="muted">Guardá una operación, un pendiente o algo que quieras recordar en tu agenda personal.</p>' +
+    formWrap('agenda-note',
+      field('title', 'Título', entry?.title || '', 'text', 'required maxlength="160" placeholder="Ej.: Operación de Luna"') +
+      field('date', 'Fecha', entry?.date || agendaDate, 'date', 'required min="1000-01-01" max="9999-12-31"') +
+      field('time', 'Hora (opcional)', entry?.time || '', 'time') +
+      area('note', 'Notas', entry?.note || ''), id)
+  );
+}
 
-          return `
-            <section class="day">
-              <h3>
-                ${dayNames[new Date(date + 'T12:00:00').getDay()]}
-                <br>
-                ${pretty(date)}
-              </h3>
-
-              ${
-                list
-                  .filter(appointment => appointment.date === date)
-                  .sort((a, b) => a.time.localeCompare(b.time))
-                  .map(appointment =>
-                    button(
-                      `
-                        ${esc(appointment.time)} ·
-                        ${esc(label('pets', appointment.petId))}
-                        <br>
-                        <small>
-                          ${esc(label('services', appointment.serviceId))}
-                          <br>
-                          ${esc(label('vets', appointment.vetId))}
-                        </small>
-                        <br>
-                        ${badge(appointment.status)}
-                      `,
-                      'appointment',
-                      appointment.id
-                    )
-                  )
-                  .join('') ||
-                '<small>Sin turnos</small>'
-              }
-            </section>
-          `;
-        }).join('')}
+function agendaEntryCard(entry) {
+  return `
+    <article class="personal-agenda-entry ${entry.done ? 'is-done' : ''}">
+      <div class="row between">
+        <h3>${esc(entry.title)}</h3>
+        <span class="badge">${entry.done ? 'Completado' : 'Pendiente'}</span>
       </div>
-    `;
-  }
-
-  return heading(
-    user.role === 'vet' ? 'Mi agenda' : 'Agenda',
-    'Organizá la atención y consultá las reservas.',
-    isAdmin() ? button('+ Nuevo turno', 'book', '', 'primary') : ''
-  ) + `
-    <section class="card">
-      <div class="toolbar">
-        <input
-          type="date"
-          id="agenda-date"
-          aria-label="Fecha de agenda"
-          value="${agendaDate}"
-        >
-
-        <select id="agenda-mode" aria-label="Vista de agenda">
-          <option value="day" ${agendaMode === 'day' ? 'selected' : ''}>
-            Vista diaria
-          </option>
-          <option value="week" ${agendaMode === 'week' ? 'selected' : ''}>
-            Vista semanal
-          </option>
-        </select>
-
-        ${
-          isAdmin()
-            ? `
-              <select id="agenda-vet" aria-label="Veterinario">
-                <option value="">Todos los profesionales</option>
-
-                ${db.vets.map(vet => `
-                  <option
-                    value="${vet.id}"
-                    ${agendaVet === vet.id ? 'selected' : ''}
-                  >${esc(vet.name)}</option>
-                `).join('')}
-              </select>
-            `
-            : ''
-        }
+      <p class="muted">${esc(entry.time || 'Todo el día')}</p>
+      ${entry.note ? `<p class="personal-agenda-text">${esc(entry.note)}</p>` : ''}
+      <div class="row">
+        ${button('Editar', 'agenda-edit', entry.id, 'small')}
+        ${button(entry.done ? 'Marcar pendiente' : 'Marcar completado', 'agenda-toggle', entry.id, 'small')}
+        ${button('Eliminar', 'agenda-delete', entry.id, 'small danger')}
       </div>
-
-      ${body}
-    </section>
-
-    ${
-      isAdmin()
-        ? `
-    <section class="card">
-      <h2>Buscar un horario disponible</h2>
-      <p class="muted">
-        Elegí una mascota, servicio y profesional para consultar
-        las fechas y horas libres.
-      </p>
-      ${button('Consultar disponibilidad', 'book')}
-    </section>
-        `
-        : ''
-    }
+    </article>
   `;
 }
 
-function book(petId = '', appointmentId = '') {
-  const appointment = appointmentId
-    ? find('appointments', appointmentId)
-    : null;
-
-  if (appointment && !appts().includes(appointment)) {
-    return;
-  }
-
-  const list = pets().filter(pet =>
-    pet.active && find('owners', pet.ownerId)?.active
-  );
-
-  if (!list.length) {
-    return toast('Registrá primero una mascota con propietario activo.');
-  }
-
-  modal(
-    appointment ? 'Reprogramar turno' : 'Solicitar un turno',
-    `
-      <div class="hint">
-        Se muestran fechas y horarios libres dentro de los próximos
-        90 días. Las reservas ocupadas se excluyen automáticamente.
-      </div>
-
-      <br>
-
-      ${formWrap(
-        'booking',
-        select(
-          'petId',
-          'Mascota',
-          list.map(pet => [pet.id, pet.name]),
-          appointment?.petId || petId || list[0].id,
-          'required'
-        ) +
-        select(
-          'serviceId',
-          'Servicio',
-          activeOptions('services'),
-          appointment?.serviceId || '',
-          'required'
-        ) +
-        select('vetId', 'Profesional', [], '', 'required') +
-        select('date', 'Fechas disponibles', [], '', 'required') +
-        select('time', 'Horarios disponibles', [], '', 'required') +
-        field(
-          'reason',
-          'Motivo',
-          appointment?.reason || '',
-          'text',
-          'required'
-        ) +
-        area(
-          'observations',
-          'Observaciones',
-          appointment?.observations || ''
-        ),
-        appointmentId
-      )}
-    `
-  );
-
-  updateBooking('service', appointment?.vetId);
-}
-
-function setOptions(name, items) {
-  const element = $(`#modal [name="${name}"]`);
-
-  ui.setHtml(element, items.length
-    ? items.map(([value, text]) => `
-        <option value="${esc(value)}">${esc(text)}</option>
-      `).join('')
-    : '<option value="">Sin disponibilidad</option>');
-}
-
-function updateBooking(stage, preferred = '') {
-  const form = $('#modal form');
-  const service = form.elements.serviceId.value;
-  const pet = form.elements.petId.value;
-
-  if (stage === 'service') {
-    let vets = db.vets.filter(vet =>
-      vet.active && vet.serviceIds.includes(service)
-    );
-
-    if (user.role === 'vet') {
-      vets = vets.filter(vet => vet.id === user.vetId);
-    }
-
-    setOptions('vetId', vets.map(vet => [vet.id, vet.name]));
-
-    if (
-      preferred &&
-      vets.some(vet => vet.id === preferred)
-    ) {
-      form.elements.vetId.value = preferred;
-    }
-  }
-
-  const vet = form.elements.vetId.value;
-
-  if (stage !== 'date') {
-    const dates = [];
-
-    for (let index = 0; index < 90; index++) {
-      const date = addDays(today(), index);
-
-      if (slots(service, vet, date, pet, form.dataset.id).length) {
-        dates.push([
-          date,
-          `${dayNames[new Date(date + 'T12:00:00').getDay()]} ${pretty(date)}`
-        ]);
-      }
-    }
-
-    setOptions('date', dates);
-  }
-
-  setOptions(
-    'time',
-    slots(
-      service,
-      vet,
-      form.elements.date.value,
-      pet,
-      form.dataset.id
-    ).map(slot => [
-      slot.time,
-      `${slot.time} · ${slot.duration} min`
-    ])
-  );
-
-  form.querySelector('button[type=submit]').disabled =
-    !form.elements.time.value;
-}
-
-function appointmentDetails(id) {
-  const appointment = appts().find(item => item.id === id);
-
-  if (!appointment) {
-    return toast('Turno no disponible.');
-  }
-
-  modal(
-    'Detalle del turno',
-    `
+function agendaDaySection(date, entries) {
+  const notes = entries.filter(entry => entry.date === date);
+  return `
+    <section class="personal-agenda-day">
       <div class="row between">
-        <h2>${esc(label('pets', appointment.petId))}</h2>
-        ${badge(appointment.status)}
+        <h2>${esc(dayNames[new Date(date + 'T12:00:00').getDay()])} · ${pretty(date)}</h2>
+        ${button('+ Anotación', 'agenda-new-day', date, 'small')}
       </div>
+      ${notes.map(agendaEntryCard).join('') || '<div class="empty">No hay anotaciones para este día.</div>'}
+    </section>
+  `;
+}
 
-      <p>
-        ${pretty(appointment.date)} ·
-        <b>${esc(appointment.time)}</b> ·
-        ${appointment.duration} minutos
-      </p>
-
-      <p>
-        ${esc(label('services', appointment.serviceId))}<br>
-        ${esc(label('vets', appointment.vetId))}<br>
-        Propietario: ${esc(label('owners', appointment.ownerId))}
-      </p>
-
-      <p>
-        Motivo: ${esc(appointment.reason)}<br>
-        ${esc(appointment.observations)}
-      </p>
-
-      <div class="row">
-        ${button('Abrir mascota', 'pet', appointment.petId)}
-
-        ${
-          !['Cancelado', 'Atendido'].includes(appointment.status)
-            ? button('Reprogramar', 'reschedule', appointment.id) +
-              button(
-                'Cancelar turno',
-                'cancel-appointment',
-                appointment.id,
-                'danger'
-              )
-            : ''
-        }
-
-        ${
-          user.role !== 'owner' && appointment.status === 'Pendiente'
-            ? button(
-                'Confirmar',
-                'confirm-appointment',
-                appointment.id,
-                'primary'
-              )
-            : ''
-        }
-
-        ${
-          user.role !== 'owner' && appointment.status === 'Confirmado'
-            ? button(
-                'Registrar atención',
-                'attend',
-                appointment.id,
-                'primary'
-              )
-            : ''
-        }
+function agendaView() {
+  if (user.role === 'owner') return ownerAgendaView();
+  if (!canUsePersonalAgenda()) return '';
+  const entries = personalAgendaEntries();
+  let body;
+  let period;
+  if (agendaMode === 'month') {
+    const month = agendaDate.slice(0, 7);
+    period = calMonthLabel(month);
+    body = `
+      <div class="personal-agenda-calendar">
+        ${['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'].map(day => `<div class="personal-agenda-weekday">${day}</div>`).join('')}
+        ${calMonthDays(month).map(date => {
+          const notes = entries.filter(entry => entry.date === date);
+          return `
+            <button type="button" class="personal-agenda-cell ${date.slice(0, 7) !== month ? 'outside' : ''} ${date === today() ? 'today' : ''}"
+              data-action="agenda-day" data-id="${date}" aria-pressed="${date === agendaDate}"
+              aria-label="${pretty(date)}: ${notes.length} ${notes.length === 1 ? 'anotación' : 'anotaciones'}">
+              <b>${Number(date.slice(8))}</b>
+              ${notes.slice(0, 2).map(entry => `<span class="personal-agenda-chip ${entry.done ? 'is-done' : ''}">${esc(entry.time ? entry.time + ' · ' : '')}${esc(entry.title)}</span>`).join('')}
+              ${notes.length > 2 ? `<small>+${notes.length - 2} más</small>` : ''}
+            </button>
+          `;
+        }).join('')}
       </div>
-    `
-  );
+      ${agendaDaySection(agendaDate, entries)}
+    `;
+  } else if (agendaMode === 'week') {
+    const day = new Date(agendaDate + 'T12:00:00').getDay();
+    const monday = addDays(agendaDate, -((day + 6) % 7));
+    period = `${pretty(monday)} – ${pretty(addDays(monday, 6))}`;
+    body = `<div class="personal-agenda-week">${Array.from({ length: 7 }, (_, index) =>
+      agendaDaySection(addDays(monday, index), entries)
+    ).join('')}</div>`;
+  } else {
+    period = pretty(agendaDate);
+    body = agendaDaySection(agendaDate, entries);
+  }
+  return heading('Mi agenda', 'Tus anotaciones y recordatorios personales, organizados por fecha.',
+    button('+ Nueva anotación', 'agenda-new', '', 'primary')) + `
+    <section class="card personal-agenda">
+      <div class="toolbar">
+        <input type="date" id="agenda-date" aria-label="Fecha de agenda" value="${agendaDate}" min="1000-01-01" max="9999-12-31">
+        <select id="agenda-mode" aria-label="Vista de agenda">
+          ${[['month', 'Vista mensual'], ['week', 'Vista semanal'], ['day', 'Vista diaria']].map(([value, label]) =>
+            `<option value="${value}" ${agendaMode === value ? 'selected' : ''}>${label}</option>`
+          ).join('')}
+        </select>
+        <div class="row">
+          <button type="button" class="small" data-action="agenda-period" data-id="-1" aria-label="Período anterior">←</button>
+          ${button('Hoy', 'agenda-period', '0', 'small')}
+          <button type="button" class="small" data-action="agenda-period" data-id="1" aria-label="Período siguiente">→</button>
+        </div>
+      </div>
+      <h2 class="personal-agenda-period">${period}</h2>
+      ${body}
+    </section>
+  `;
 }
 
 // CATÁLOGO, AVISOS, RECORDATORIOS Y NOTIFICACIONES
@@ -3958,18 +3490,27 @@ function catalog() {
   `;
 }
 
-function noticesView() {
+function noticesView(inSettings = false) {
   const rows = (
     isAdmin() ? db.notices : visibleNotices()
   ).filter(matches);
 
-  return heading(
-    'Avisos',
-    'Información publicada por la veterinaria.',
-    isAdmin()
-      ? button('+ Nuevo aviso', 'create', 'notices', 'primary')
-      : ''
-  ) +
+  const actions = isAdmin()
+    ? button('+ Nuevo aviso', 'create', 'notices', 'primary')
+    : '';
+  const header = inSettings
+    ? `
+      <div class="heading">
+        <div>
+          <h2>Avisos de la veterinaria</h2>
+          <p>Informá cierres por fecha, feriados y cambios en los días u horarios de atención.</p>
+        </div>
+        <div class="row">${actions}</div>
+      </div>
+    `
+    : heading('Avisos', 'Información publicada por la veterinaria.', actions);
+
+  return header +
   toolbar() +
   rows.map(notice => `
     <article class="card notice">
@@ -4008,7 +3549,9 @@ function noticesView() {
           : ''
       }
     </article>
-  `).join('');
+  `).join('') + (inSettings && !rows.length
+    ? '<div class="empty">No hay avisos para mostrar.</div>'
+    : '');
 }
 
 function reminderList() {
@@ -4408,6 +3951,9 @@ function renderContent() {
         <section class="card">
           ${formWrap('settings', clinicFields(db.config))}
         </section>
+        <section aria-label="Avisos de la veterinaria">
+          ${noticesView(true)}
+        </section>
       `;
       break;
 
@@ -4609,7 +4155,7 @@ function editForm(collection, id = '', preset = {}) {
       ) +
       field(
         'duration',
-        'Duración del turno',
+        'Duración estimada de atención',
         item.duration || db.config.duration,
         'number',
         'required min="5" max="240"'
@@ -4770,7 +4316,7 @@ function editForm(collection, id = '', preset = {}) {
   );
 }
 
-function clinicalForm(petId, appointmentId = '') {
+function clinicalForm(petId) {
   if (
     user.role === 'owner' ||
     !canPet(find('pets', petId))
@@ -4851,7 +4397,7 @@ function clinicalForm(petId, appointmentId = '') {
           ],
           true
         ),
-        petId + '|' + appointmentId
+        petId
       )}
     `
   );
@@ -5723,17 +5269,6 @@ function publicProfile(id) {
 
 // PERSISTENCIA DE FORMULARIOS
 
-function pushNotification(appointment, message) {
-  db.notifications.push({
-    id: uid(),
-    message,
-    ownerId: appointment.ownerId,
-    vetId: appointment.vetId,
-    date: new Date().toISOString(),
-    readBy: []
-  });
-}
-
 // NOTIFICACIÓN AL VETERINARIO POR INGRESO A SALA DE ESPERA.
 // Cada vez que Administración carga una mascota en sala (vía escaneo,
 // código o ingreso manual), se genera una notificación para TODOS los
@@ -5912,11 +5447,8 @@ async function saveEntity(form) {
       );
     }
 
-    if (
-      data.start >= data.end ||
-      minutes(data.end) - minutes(data.start) < data.duration
-    ) {
-      return fail('La franja debe permitir al menos un turno completo.');
+    if (data.start >= data.end) {
+      return fail('El horario de fin debe ser posterior al de inicio.');
     }
 
     if (
@@ -6445,80 +5977,29 @@ async function submitForm(form) {
       break;
     }
 
-    case 'booking': {
-      const appointment = form.dataset.id
-        ? appts().find(item => item.id === form.dataset.id)
-        : null;
-
-      if (form.dataset.id && !appointment) {
-        return fail('Turno no disponible.');
-      }
-
-      if (
-        appointment &&
-        ['Atendido', 'Cancelado'].includes(appointment.status)
-      ) {
-        return fail('Este turno no admite reprogramación.');
-      }
-
-      const pet = find('pets', data.petId);
-
-      if (
-        !canPet(pet) ||
-        !pet.active ||
-        !find('owners', pet.ownerId)?.active
-      ) {
-        return fail('Mascota no disponible.');
-      }
-
-      if (user.role === 'vet' && data.vetId !== user.vetId) {
-        return fail('Elegí tu agenda profesional.');
-      }
-
-      const slot = slots(
-        data.serviceId,
-        data.vetId,
-        data.date,
-        data.petId,
-        appointment?.id
-      ).find(item => item.time === data.time);
-
-      if (!slot) {
-        return fail(
-          'El horario seleccionado ya está ocupado o no está disponible.'
-        );
-      }
-
-      const row = {
-        ...data,
-        id: appointment?.id || uid(),
-        ownerId: pet.ownerId,
-        duration: slot.duration,
-        status: user.role === 'owner' ? 'Pendiente' : 'Confirmado'
-      };
-
+    case 'agenda-note': {
+      if (!canUsePersonalAgenda()) return;
+      const id = form.dataset.id;
+      const existing = id ? personalAgendaEntry(id) : null;
+      if (id && !existing) return fail('No podés editar esta anotación.');
+      const title = String(data.title || '').trim();
+      const date = String(data.date || '');
+      const time = String(data.time || '');
+      const note = String(data.note || '').trim();
+      if (!title || title.length > 160) return fail('Ingresá un título de hasta 160 caracteres.');
+      if (!validAgendaDate(date)) return fail('Elegí una fecha válida.');
+      if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return fail('Ingresá una hora válida.');
       if (commit(() => {
-        if (appointment) {
-          Object.assign(appointment, row);
+        if (existing) {
+          Object.assign(existing, { title, date, time, note, updatedAt: new Date().toISOString() });
         } else {
-          db.appointments.push(row);
+          db.agendaNotes.push({ id: uid(), userId: user.id, title, date, time, note, done: false, createdAt: new Date().toISOString() });
         }
-
-        pushNotification(
-          row,
-          `${appointment ? 'Turno reprogramado' : 'Nuevo turno'} de ${pet.name}: ${pretty(row.date)} a las ${row.time}. Estado: ${row.status}.`
-        );
       })) {
+        agendaDate = date;
         close();
         navigate('agenda');
-        agendaDate = row.date;
-        renderContent();
-
-        toast(
-          row.status === 'Pendiente'
-            ? 'Solicitud de turno registrada.'
-            : 'Turno confirmado.'
-        );
+        toast('Anotación guardada en tu agenda.');
       }
       break;
     }
@@ -6592,21 +6073,10 @@ async function submitForm(form) {
     case 'clinical': {
       if (user.role === 'owner') return;
 
-      const [petId, appointmentId] = form.dataset.id.split('|');
+      const petId = form.dataset.id;
       const pet = find('pets', petId);
 
       if (!canPet(pet)) return;
-
-      const appointment = appointmentId
-        ? appts().find(item => item.id === appointmentId)
-        : null;
-
-      if (
-        appointmentId &&
-        (!appointment || appointment.status !== 'Confirmado')
-      ) {
-        return fail('El turno ya no está confirmado.');
-      }
 
       if (!data.info.trim()) {
         return fail('Ingresá la información clínica.');
@@ -6643,14 +6113,6 @@ async function submitForm(form) {
           });
         }
 
-        if (appointment) {
-          appointment.status = 'Atendido';
-
-          pushNotification(
-            appointment,
-            `La atención de ${pet.name} fue registrada.`
-          );
-        }
       })) {
         close();
         navigate('pet', petId);
@@ -6710,7 +6172,7 @@ async function submitForm(form) {
               : 'Vacuna guardada. El ticket quedó para Administración y se programó la próxima aplicación.')
           : (existing
               ? 'Atención actualizada correctamente.'
-              : 'Consulta guardada. El turno terminó y el ticket quedó para Administración.'));
+              : 'Consulta guardada. La atención terminó y el ticket quedó para Administración.'));
       }
       break;
     }
@@ -6804,7 +6266,8 @@ async function action(actionName, id, element) {
     case 'logout':
       user = null;
       selectedPet = null;
-      agendaVet = '';
+      agendaDate = today();
+      agendaMode = 'month';
       close();
 
       history.replaceState(
@@ -6826,6 +6289,7 @@ async function action(actionName, id, element) {
 
     case 'account': {
       if ($('.account-menu')) {
+        element.setAttribute('aria-expanded', 'false');
         return $('.account-menu').remove();
       }
 
@@ -6845,7 +6309,8 @@ async function action(actionName, id, element) {
         ${button('Cerrar sesión', 'logout')}
       `);
 
-      $('.topbar').append(menu);
+      $('.sidebar-profile-wrap').append(menu);
+      element.setAttribute('aria-expanded', 'true');
       break;
     }
 
@@ -7098,81 +6563,82 @@ async function action(actionName, id, element) {
       }
       break;
 
-    case 'book':
-      book(id);
+    case 'agenda-new':
+      agendaNoteForm();
       break;
 
-    case 'appointment':
-      appointmentDetails(id);
-      break;
-
-    case 'reschedule':
-      book('', id);
-      break;
-
-    case 'vet-agenda':
-      if (isAdmin()) {
-        agendaVet = id;
-        navigate('agenda');
+    case 'agenda-new-day':
+      if (canUsePersonalAgenda() && validAgendaDate(id)) {
+        agendaDate = id;
+        agendaNoteForm();
       }
       break;
 
-    case 'cancel-appointment':
-      modal(
-        'Cancelar turno',
-        `
-          <p>
-            ¿Querés cancelar este turno?
-            El horario quedará disponible.
-          </p>
-
-          <div class="form-actions">
-            ${button('Volver', 'close')}
-            ${button('Cancelar turno', 'cancel-confirm', id, 'danger')}
-          </div>
-        `
-      );
+    case 'agenda-edit':
+      agendaNoteForm(id);
       break;
 
-    case 'cancel-confirm':
-    case 'confirm-appointment': {
-      const appointment = appts().find(item => item.id === id);
+    case 'agenda-open': {
+      const entry = personalAgendaEntry(id);
+      if (!entry) return;
+      agendaDate = entry.date;
+      navigate('agenda');
+      break;
+    }
 
-      if (
-        !appointment ||
-        ['Atendido', 'Cancelado'].includes(appointment.status) ||
-        (
-          actionName === 'confirm-appointment' &&
-          user.role === 'owner'
-        )
-      ) {
-        return;
+    case 'agenda-day':
+      if (canUsePersonalAgenda() && validAgendaDate(id)) {
+        agendaDate = id;
+        renderContent();
       }
+      break;
 
-      const status = actionName === 'cancel-confirm'
-        ? 'Cancelado'
-        : 'Confirmado';
+    case 'agenda-period': {
+      if (!canUsePersonalAgenda() || !['-1', '0', '1'].includes(id)) return;
+      let nextDate;
+      if (id === '0') {
+        nextDate = today();
+      } else if (agendaMode === 'month') {
+        nextDate = calShiftMonth(agendaDate.slice(0, 7), Number(id)) + '-01';
+      } else {
+        nextDate = addDays(agendaDate, Number(id) * (agendaMode === 'week' ? 7 : 1));
+      }
+      if (!validAgendaDate(nextDate)) return;
+      agendaDate = nextDate;
+      renderContent();
+      break;
+    }
 
-      if (commit(() => {
-        appointment.status = status;
-
-        pushNotification(
-          appointment,
-          `Tu turno de ${label('pets', appointment.petId)} del ${pretty(appointment.date)} a las ${appointment.time} fue ${status.toLowerCase()}.`
-        );
-      })) {
-        close();
-        shell();
-        toast('Turno ' + status.toLowerCase() + '.');
+    case 'agenda-toggle': {
+      const entry = personalAgendaEntry(id);
+      if (!entry) return;
+      if (commit(() => { entry.done = !entry.done; })) {
+        renderContent();
+        toast(entry.done ? 'Recordatorio completado.' : 'Recordatorio marcado como pendiente.');
       }
       break;
     }
 
-    case 'attend': {
-      const appointment = appts().find(item => item.id === id);
+    case 'agenda-delete': {
+      const entry = personalAgendaEntry(id);
+      if (!entry) return;
+      modal('Eliminar anotación', `
+        <p>¿Querés eliminar <b>${esc(entry.title)}</b> de tu agenda?</p>
+        <div class="form-actions">
+          ${button('Cancelar', 'close')}
+          ${button('Eliminar', 'agenda-delete-confirm', entry.id, 'danger')}
+        </div>
+      `);
+      break;
+    }
 
-      if (appointment && user.role !== 'owner') {
-        clinicalForm(appointment.petId, id);
+    case 'agenda-delete-confirm': {
+      const entry = personalAgendaEntry(id);
+      if (!entry) return;
+      if (commit(() => { db.agendaNotes = db.agendaNotes.filter(item => item !== entry); })) {
+        close();
+        renderContent();
+        toast('Anotación eliminada.');
       }
       break;
     }
@@ -7972,35 +7438,15 @@ ui.on('change', event => {
   }
 
   if (element.id === 'agenda-date') {
-    agendaDate = element.value || today();
+    if (!canUsePersonalAgenda() || !validAgendaDate(element.value)) return;
+    agendaDate = element.value;
     renderContent();
   }
 
   if (element.id === 'agenda-mode') {
+    if (!canUsePersonalAgenda() || !['day', 'week', 'month'].includes(element.value)) return;
     agendaMode = element.value;
     renderContent();
-  }
-
-  if (element.id === 'agenda-vet') {
-    agendaVet = element.value;
-    renderContent();
-  }
-
-  if (element.closest('form[data-form=booking]')) {
-    if (element.name === 'serviceId') {
-      updateBooking('service');
-    }
-
-    if (
-      element.name === 'vetId' ||
-      element.name === 'petId'
-    ) {
-      updateBooking('vet');
-    }
-
-    if (element.name === 'date') {
-      updateBooking('date');
-    }
   }
 
   // Formulario de usuarios: el vínculo al perfil aparece según el rol.
