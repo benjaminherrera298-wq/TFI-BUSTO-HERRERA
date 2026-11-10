@@ -1,6 +1,7 @@
 import { createAttentionFacade } from './attentionFacade.js';
 import { populateSamplePractice } from './samplePractice.js';
 import { PET_AVATARS, findPetAvatar } from './petAvatars.js';
+import { MAX_MONEY, requiredText, personName, phoneNumber, documentNumber, emailAddress, passwordValue, numericValue, realDate, clockTime, validateOwner, assertUniqueOwner, validateEntity, clinicalMeasurements } from './validation.js';
 
 export function startVeterinaryApplication(ui) {
 'use strict';
@@ -323,6 +324,16 @@ function button(text, actionName, id = '', className = '') {
 }
 
 function field(name, text, value = '', type = 'text', extra = '') {
+  if (name === 'dni') extra += ' inputmode="numeric" maxlength="9" data-digits="9"';
+  if (name === 'identifier') extra += ' inputmode="numeric" maxlength="11" data-digits="11" pattern="(?:[0-9]{7,9}|[0-9]{11})"';
+  if (type === 'tel') extra += ' data-phone maxlength="40" pattern="\\+?[0-9\\x20\\x28\\x29\\-]+" title="Solo números, +, espacios, paréntesis y guiones"';
+  if (['first', 'last'].includes(name) || extra.includes('data-person-name')) {
+    if (!extra.includes('data-person-name')) extra += ' data-person-name';
+    extra += ' maxlength="160" pattern="[\\p{L}\\p{M} ’\\x27\\-]+" title="Solo letras, espacios, apóstrofos y guiones"';
+  }
+  if (name === 'weight') extra += ' max="100000"';
+  if (name === 'temperature') extra += ' min="0.1" max="100"';
+  if (name === 'price' || name === 'stock' || name === 'serviceAmount' || name === 'med-price[]') extra += ` max="${MAX_MONEY}"`;
   return `
     <label class="field">
       ${text}
@@ -491,6 +502,11 @@ function commit(callback) {
   return false;
 }
 
+async function withDataLock(callback) {
+  if (globalThis.navigator?.locks?.request) return navigator.locks.request(KEY, callback);
+  return callback();
+}
+
 function load() {
   try {
     db = JSON.parse(localStorage.getItem(KEY)) || { configured: false };
@@ -500,7 +516,7 @@ function load() {
 
   if (!db.configured) {
     db = seed({
-      name: 'Veterinaria Los Aromos', identifier: 'Responsable de ejemplo',
+      name: 'Veterinaria Los Aromos', identifier: '20301234567',
       address: 'Av. Belgrano 1250, San Miguel de Tucumán', phone: '3815550199',
       email: 'recepcion@example.com', days: [1, 2, 3, 4, 5, 6],
       start: '08:00', end: '20:00', duration: 30, logo: ''
@@ -1904,7 +1920,7 @@ function homeVetWaitingRoom() {
                     <p><small>Motivo informado:</small> ${esc(entry.reason || '—')}</p>
 
                     <div class="row">
-                      ${button(
+                      ${entry.vetId && entry.vetId !== user.vetId && user.role === 'vet' ? '<span class="muted">En atención con otro veterinario</span>' : button(
                         entry.status === 'En atención' ? 'Continuar atención' : 'Atender',
                         'vet-attend',
                         entry.id,
@@ -2837,7 +2853,15 @@ function vetProfile() {
 // Vista de solo lectura (Propietario): horario general de la veterinaria
 // + horarios de atención de cada especialista. Sin alta, edición ni
 // activación: solo consulta para saber cuándo acercarse.
+function publishedSchedule(schedule) {
+  if (!schedule.active || !(db.config.days || []).map(Number).includes(Number(schedule.day))) return null;
+  const start = schedule.start < db.config.start ? db.config.start : schedule.start;
+  const end = schedule.end > db.config.end ? db.config.end : schedule.end;
+  return start < end ? { ...schedule, start, end } : null;
+}
+
 function ownerSchedulesView() {
+  const published = db.schedules.map(publishedSchedule).filter(Boolean);
   const openDays = (db.config.days || []).map(Number).sort((a, b) => a - b);
   // Atenciones especiales: días de ecos (Ecografía) o de operaciones
   // (Cirugía / Operación / Quirófano). Se detecta por nombre para que
@@ -2852,7 +2876,7 @@ function ownerSchedulesView() {
   // (ecos u operaciones). Si no tienen, no aparecen en esta sección.
   const vets = db.vets.filter(vet =>
     vet.active &&
-    db.schedules.some(schedule =>
+    published.some(schedule =>
       schedule.vetId === vet.id &&
       schedule.active &&
       isSpecialService(label('services', schedule.serviceId))
@@ -2879,7 +2903,7 @@ function ownerSchedulesView() {
 
     ${vets.map(vet => {
       // Solo franjas especiales (ecos / operaciones) de este veterinario.
-      const rows = db.schedules
+      const rows = published
         .filter(schedule =>
           schedule.vetId === vet.id &&
           schedule.active &&
@@ -2928,7 +2952,7 @@ function scheduleTable(rows) {
       dayNames[schedule.day],
       `${schedule.start} – ${schedule.end}`,
       schedule.duration + ' min',
-      badge(schedule.active ? 'Activo' : 'Inactivo'),
+      badge(!schedule.active ? 'Inactivo' : !publishedSchedule(schedule) ? 'Fuera del horario general' : (schedule.start < db.config.start || schedule.end > db.config.end) ? 'Horario limitado' : 'Activo'),
       button(
         'Editar',
         'edit',
@@ -2969,6 +2993,7 @@ function schedulesView() {
     <div class="hint">
       Estas franjas indican los horarios habituales de atención de cada profesional.
       Las notas y recordatorios personales se guardan desde Mi agenda.
+      Los propietarios solo ven las franjas dentro de los días y horas de apertura de Configuración.
     </div>
 
     <section class="card">
@@ -4040,7 +4065,7 @@ function editForm(collection, id = '', preset = {}) {
 
   if (collection === 'owners') {
     content =
-      field('name', 'Nombre y apellido', item.name, 'text', 'required') +
+      field('name', 'Nombre y apellido', item.name, 'text', 'required data-person-name') +
       field(
         'dni',
         'DNI',
@@ -4055,7 +4080,7 @@ function editForm(collection, id = '', preset = {}) {
 
   if (collection === 'vets') {
     content =
-      field('name', 'Nombre y apellido', item.name, 'text', 'required') +
+      field('name', 'Nombre y apellido', item.name, 'text', 'required data-person-name') +
       field('license', 'Matrícula', item.license, 'text', 'required') +
       field(
         'specialty',
@@ -4220,8 +4245,7 @@ function editForm(collection, id = '', preset = {}) {
     // roles Administrador, Veterinario y Propietario: solo hay una
     // cuenta de Superadmin y ese rol no se ofrece).
     // Con rol Veterinario aparece el vínculo al perfil profesional.
-    // Con rol Propietario no se pide nada más: la cuenta se vincula
-    // sola por correo con el perfil creado en Propietarios.
+    // El propietario se puede vincular o registrar desde este formulario.
     const roleOptions = user.role === 'admin'
       ? [['owner', roleNames.owner], ['vet', roleNames.vet]]
       : Object.entries(roleNames).filter(([value]) => value !== 'superadmin');
@@ -4229,7 +4253,7 @@ function editForm(collection, id = '', preset = {}) {
     const currentRole = item.role || 'owner';
 
     content =
-      field('name', 'Nombre', item.name, 'text', 'required') +
+      field('name', 'Nombre', item.name, 'text', 'required data-person-name') +
       field('email', 'Correo (usuario)', item.email, 'email', 'required') +
       field(
         'password',
@@ -4262,8 +4286,15 @@ function editForm(collection, id = '', preset = {}) {
           ['', 'Sin vincular'],
           ...activeOptions('vets')
         ],
-        item.vetId
+        item.vetId,
+        currentRole === 'vet' ? '' : 'disabled'
       ) +
+      '</div>' +
+      `<div class="full" data-role-link="owner" ${currentRole === 'owner' ? '' : 'hidden'}>` +
+      select('ownerId', 'Perfil propietario', [['', 'Vincular por correo o crear perfil'], ...activeOptions('owners')], item.ownerId, currentRole === 'owner' ? '' : 'disabled') +
+      '<p class="muted">Si no existe un perfil con este correo, completá DNI y dirección para registrarlo junto con la cuenta.</p>' +
+      field('ownerDni', 'DNI del nuevo propietario', '', 'text', `inputmode="numeric" maxlength="9" pattern="[0-9]{7,9}" data-digits="9" ${currentRole === 'owner' ? '' : 'disabled'}`) +
+      field('ownerAddress', 'Dirección del nuevo propietario', '', 'text', currentRole === 'owner' ? '' : 'disabled') +
       '</div>';
   }
 
@@ -4411,7 +4442,7 @@ function medicationRow(medication = {}) {
       <div class="form-grid">
         ${field('med-name[]', 'Nombre', medication.name || '')}
         ${field('med-dose[]', 'Dosis', medication.dose || '')}
-        ${field('med-quantity[]', 'Cantidad', medication.quantity || '')}
+        ${field('med-quantity[]', 'Cantidad', medication.quantity || '', 'number', 'min="1" max="1000000" step="1" inputmode="numeric"')}
         ${field('med-route[]', 'Vía de administración', medication.route || '')}
         ${area('med-notes[]', 'Observaciones', medication.notes || '')}
       </div>
@@ -5334,9 +5365,17 @@ async function imageData(file) {
 async function clinicData(form) {
   const data = Object.fromEntries(new FormData(form));
 
+  data.name = requiredText(data.name, 'Nombre de la veterinaria');
+  data.identifier = documentNumber(data.identifier, true);
+  data.address = requiredText(data.address, 'Dirección', 300);
+  data.phone = phoneNumber(data.phone);
+  data.email = emailAddress(data.email);
+  data.start = clockTime(data.start);
+  data.end = clockTime(data.end);
+
   data.days = new FormData(form)
     .getAll('days')
-    .map(Number);
+    .map(value => numericValue(value, 'Día', { max: 6, integer: true }));
 
   if (!data.days.length) {
     throw new Error('Seleccioná al menos un día de atención.');
@@ -5346,7 +5385,7 @@ async function clinicData(form) {
     throw new Error('El cierre debe ser posterior a la apertura.');
   }
 
-  data.duration = Number(data.duration);
+  data.duration = numericValue(data.duration, 'Duración', { min: 5, max: 240, integer: true });
 
   data.logo =
     await imageData(form.elements.logo.files[0]) ||
@@ -5365,14 +5404,19 @@ async function saveEntity(form) {
   }
 
   const old = id ? find(collection, id) : null;
+  if (id && !old) return fail('El registro ya no está disponible.');
   const formData = new FormData(form);
   const data = Object.fromEntries(formData);
 
   Object.keys(data).forEach(key => {
-    if (typeof data[key] === 'string') {
+    if (typeof data[key] === 'string' && key !== 'password') {
       data[key] = data[key].trim();
     }
   });
+
+  validateEntity(collection, data, old, today());
+  if (collection === 'owners') assertUniqueOwner(db.owners, data, id);
+  let newOwner = null;
 
   if (form.elements.photo) {
     const uploadedPhoto = await imageData(form.elements.photo.files[0]);
@@ -5527,25 +5571,25 @@ async function saveEntity(form) {
       return fail('Ese usuario ya existe.');
     }
 
-    // La cuenta de propietario se vincula sola por correo con el perfil
-    // creado en Propietarios (el formulario ya no pide ese vínculo).
-    if (data.role === 'owner' && !(data.ownerId || old?.ownerId)) {
-      const ownerMatch = db.owners.find(owner =>
-        owner.active &&
-        String(owner.email || '').toLowerCase() ===
-          String(data.email || '').toLowerCase()
-      );
-
-      if (!ownerMatch) {
-        return fail('No hay un propietario con ese correo. Crealo primero en Propietarios.');
+    if (data.role === 'owner') {
+      // Un vínculo explícito evita elegir arbitrariamente entre datos antiguos duplicados.
+      data.ownerId = Object.hasOwn(data, 'ownerId') ? data.ownerId : (old?.ownerId || '');
+      if (!data.ownerId) {
+        const matches = db.owners.filter(owner => owner.active && String(owner.email || '').trim().toLowerCase() === data.email);
+        if (matches.length > 1) return fail('Hay varios perfiles con ese correo. Seleccioná el propietario correspondiente.');
+        if (matches.length === 1) data.ownerId = matches[0].id;
+        else {
+          newOwner = validateOwner({ name: data.name, email: data.email, phone: data.phone, dni: data.ownerDni, address: data.ownerAddress, id: uid(), active: true });
+          assertUniqueOwner(db.owners, newOwner);
+          data.ownerId = newOwner.id;
+        }
       }
-
-      data.ownerId = ownerMatch.id;
+      if (db.users.some(account => account.id !== id && account.role === 'owner' && account.ownerId === data.ownerId)) return fail('Este propietario ya tiene una cuenta individual.');
     }
 
     if (
-      (data.role === 'vet' && !(data.vetId || old?.vetId)) ||
-      (data.role === 'owner' && !(data.ownerId || old?.ownerId))
+      (data.role === 'vet' && !find('vets', data.vetId)?.active) ||
+      (data.role === 'owner' && !newOwner && !find('owners', data.ownerId)?.active)
     ) {
       return fail('Vinculá la cuenta al perfil correspondiente.');
     }
@@ -5573,6 +5617,9 @@ async function saveEntity(form) {
   const newId = id || uid();
 
   const ok = commit(() => {
+    if (newOwner) db.owners.push(newOwner);
+    delete data.ownerDni;
+    delete data.ownerAddress;
     const row = {
       active: true,
       ...old,
@@ -5661,6 +5708,10 @@ async function submitForm(form) {
       break;
 
     case 'admin':
+      personName(data.first);
+      personName(data.last);
+      data.email = emailAddress(data.email);
+      data.password = passwordValue(data.password);
       if (data.password !== data.confirm) {
         return fail('Las contraseñas no coinciden.');
       }
@@ -5763,6 +5814,7 @@ async function submitForm(form) {
         recovery.verified = true;
         recoverScreen();
       } else {
+        passwordValue(data.password);
         if (data.password !== data.confirm) {
           return fail('Las contraseñas no coinciden.');
         }
@@ -5878,6 +5930,7 @@ async function submitForm(form) {
 
     case 'charge': {
       if (!isAdmin()) return fail('No tenés permiso.');
+      load();
 
       const chargedTicket = ticket(form.dataset.id);
 
@@ -5904,9 +5957,7 @@ async function submitForm(form) {
           dose: String(chargeDoses[index] ?? '').trim(),
           route: String(chargeRoutes[index] ?? '').trim(),
           notes: String(chargeNotes[index] ?? '').trim(),
-          price: chargePrices[index] === '' || chargePrices[index] == null
-            ? NaN
-            : Math.round(Number(chargePrices[index]))
+          price: numericValue(chargePrices[index], `Precio de ${name || 'el concepto'}`, { max: MAX_MONEY, integer: true })
         }))
         .filter(medication => medication.name || Number.isFinite(medication.price));
 
@@ -5928,14 +5979,15 @@ async function submitForm(form) {
 
       const serviceAmount = formData.get('serviceAmount') === '' || formData.get('serviceAmount') == null
         ? 0
-        : Math.round(Number(formData.get('serviceAmount')));
+        : numericValue(formData.get('serviceAmount'), 'Atención / servicios', { max: MAX_MONEY, integer: true });
 
       if (!Number.isFinite(serviceAmount) || serviceAmount < 0) {
         return fail('Ingresá un monto válido en atención / servicios.');
       }
 
-      const chargeTotal = serviceAmount +
-        chargeMeds.reduce((sum, medication) => sum + medication.price, 0);
+      const chargeTotal = serviceAmount + chargeMeds.reduce((sum, medication) => sum + medication.price, 0);
+
+      if (!Number.isSafeInteger(chargeTotal) || chargeTotal > MAX_MONEY) return fail(`El total no puede superar $${MAX_MONEY}.`);
 
       if (chargeTotal <= 0) {
         return fail('El total debe ser mayor a 0. Cargá al menos un precio.');
@@ -6014,9 +6066,7 @@ async function submitForm(form) {
         return fail('Elegí una de tus mascotas.');
       }
 
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) {
-        return fail('Elegí una fecha.');
-      }
+      data.date = realDate(data.date);
 
       const category = CARE_CATEGORIES.some(entry => entry[0] === data.category)
         ? data.category
@@ -6078,6 +6128,13 @@ async function submitForm(form) {
 
       if (!canPet(pet)) return;
 
+      data.date = realDate(data.date, 'Fecha de atención', { latest: today() });
+      data.title = requiredText(data.title, 'Título');
+      data.info = requiredText(data.info, 'Información clínica', 10000);
+      const measurements = clinicalMeasurements(data);
+      data.weight = measurements.weight ?? '';
+      data.nextDate = realDate(data.nextDate, 'Próximo cuidado', { optional: true });
+
       if (!data.info.trim()) {
         return fail('Ingresá la información clínica.');
       }
@@ -6125,6 +6182,7 @@ async function submitForm(form) {
 
     case 'attention': {
       if (user.role !== 'vet' && user.role !== 'superadmin') return;
+      load();
 
       const [entryId, clinicalId] = form.dataset.id.split('|');
 
@@ -6133,6 +6191,9 @@ async function submitForm(form) {
         : null;
 
       const existing = clinicalId ? find('clinical', clinicalId) : null;
+
+      if (clinicalId && !existing) return fail('La atención ya no está disponible.');
+      if (entryId && clinicalId) return fail('Seleccioná un ingreso o una atención para editar.');
 
       if (!entry && !existing) {
         return fail('La atención no está disponible.');
@@ -6166,7 +6227,8 @@ async function submitForm(form) {
       if (result.ok) {
         close();
         navigate('dailyHistory');
-        toast(result.isVaccine
+        const paid = existing && ['Pagado', 'Cobrado'].includes(ticket(existing.ticketId)?.status);
+        toast(paid ? 'Historia clínica actualizada. El ticket pagado conserva los datos del cobro.' : result.isVaccine
           ? (existing
               ? 'Vacuna actualizada. El ticket quedó para Administración.'
               : 'Vacuna guardada. El ticket quedó para Administración y se programó la próxima aplicación.')
@@ -6179,6 +6241,9 @@ async function submitForm(form) {
 
     case 'inline-owner': {
       if (!mayEdit('owners')) return;
+
+      validateOwner(data);
+      assertUniqueOwner(db.owners, data);
 
       const owner = {
         ...data,
@@ -6203,6 +6268,9 @@ async function submitForm(form) {
 
     case 'reset-password':
       if (!isAdmin()) return;
+
+      passwordValue(data.password);
+      if (!find('users', form.dataset.id)) return fail('La cuenta ya no está disponible.');
 
       if (data.adminPassword !== user.password) {
         return fail('Tu contraseña de administrador es incorrecta.');
@@ -6448,7 +6516,7 @@ async function action(actionName, id, element) {
         'Registrar propietario',
         formWrap(
           'inline-owner',
-          field('name', 'Nombre y apellido', '', 'text', 'required') +
+          field('name', 'Nombre y apellido', '', 'text', 'required data-person-name') +
           field(
             'dni',
             'DNI',
@@ -6970,6 +7038,7 @@ async function action(actionName, id, element) {
 
     case 'vet-attend': {
       if (user.role !== 'vet' && user.role !== 'superadmin') return;
+      load();
 
       const entry = (db.waitingRoom || []).find(item => item.id === id);
 
@@ -6979,6 +7048,8 @@ async function action(actionName, id, element) {
         renderContent();
         return toast('Este paciente ya no está en espera.');
       }
+
+      if (user.role === 'vet' && entry.vetId && entry.vetId !== user.vetId) return toast('Otro veterinario está atendiendo a este paciente.');
 
       if (commit(() => {
         entry.status = 'En atención';
@@ -7297,11 +7368,8 @@ ui.on('click', event => {
 
   if (!element) return;
 
-  action(
-    element.dataset.action,
-    element.dataset.id,
-    element
-  ).catch(error => toast(error.message));
+  const run = () => action(element.dataset.action, element.dataset.id, element);
+  (element.dataset.action === 'vet-attend' ? withDataLock(run) : run()).catch(error => toast(error.message));
 });
 
 ui.on('submit', async event => {
@@ -7319,7 +7387,8 @@ ui.on('submit', async event => {
       draft.nextConfig = await clinicData(form);
     }
 
-    await submitForm(form);
+    if (['attention', 'charge'].includes(form.dataset.form)) await withDataLock(() => submitForm(form));
+    else await submitForm(form);
   } catch (error) {
     fail(error.message || 'No se pudo completar la operación.');
   } finally {
@@ -7330,6 +7399,10 @@ ui.on('submit', async event => {
 });
 
 ui.on('input', event => {
+  const input = event.target;
+  if (input.dataset?.digits) input.value = input.value.replace(/\D/g, '').slice(0, Number(input.dataset.digits));
+  if (input.hasAttribute?.('data-person-name')) input.value = input.value.replace(/[^\p{L}\p{M} '\u2019-]/gu, '');
+  if (input.hasAttribute?.('data-phone')) input.value = input.value.replace(/[^\d+ ()-]/g, '');
   // Total automático del cobro: recalcula al tipear precios.
   if (event.target.matches?.('[data-charge-price]')) {
     updateChargeTotal();
@@ -7456,6 +7529,7 @@ ui.on('change', event => {
     if (userForm && String(userForm.dataset.id || '').startsWith('users:')) {
       userForm.querySelectorAll('[data-role-link]').forEach(wrapper => {
         wrapper.hidden = wrapper.dataset.roleLink !== element.value;
+        wrapper.querySelectorAll('input, select, textarea').forEach(control => { control.disabled = wrapper.hidden; });
       });
     }
   }
@@ -7490,7 +7564,12 @@ window.addEventListener('storage', onStorage);
 
 // INICIO DE LA APLICACIÓN
 
-applyTheme(currentTheme());
+let initialTheme = currentTheme();
+try {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme === 'light' || savedTheme === 'dark') initialTheme = savedTheme;
+} catch { /* Aplicar el tema del documento si el almacenamiento no está disponible. */ }
+applyTheme(initialTheme);
 
 load();
 

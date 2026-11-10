@@ -40,7 +40,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" @click="dispatch('click', $event)" @submit="dispatch('submit', $event)"
+  <div ref="container" class="application-root" @click="dispatch('click', $event)" @submit="dispatch('submit', $event)"
        @input="dispatch('input', $event)" @change="dispatch('change', $event)">
     <div id="app"></div>
     <dialog id="modal" aria-labelledby="modal-title"></dialog>

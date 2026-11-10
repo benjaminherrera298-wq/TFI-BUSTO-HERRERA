@@ -1,0 +1,382 @@
+{
+  "generatedAt": "2026-11-10T22:08:24.677Z",
+  "scope": "Pruebas aisladas de eventos, revisión de atributos HTML y código. Sin navegador real.",
+  "summary": {
+    "PASS": 32,
+    "FINDING": 0,
+    "HARNESS_ERROR": 0
+  },
+  "results": [
+    {
+      "id": "NAV-admin",
+      "description": "Navegación de admin",
+      "coverage": "eventos con almacenamiento aislado",
+      "status": "PASS",
+      "evidence": [
+        "home",
+        "pets",
+        "vets",
+        "agenda",
+        "schedules",
+        "products",
+        "waitingRoom",
+        "users",
+        "settings"
+      ]
+    },
+    {
+      "id": "NAV-vet1",
+      "description": "Navegación de vet1",
+      "coverage": "eventos con almacenamiento aislado",
+      "status": "PASS",
+      "evidence": [
+        "home",
+        "pets",
+        "agenda",
+        "dailyHistory",
+        "notifications"
+      ]
+    },
+    {
+      "id": "NAV-owner1",
+      "description": "Navegación de owner1",
+      "coverage": "eventos con almacenamiento aislado",
+      "status": "PASS",
+      "evidence": [
+        "pets",
+        "agenda",
+        "schedules",
+        "products",
+        "notices",
+        "reminders"
+      ]
+    },
+    {
+      "id": "NAV-super",
+      "description": "Navegación de super",
+      "coverage": "eventos con almacenamiento aislado",
+      "status": "PASS",
+      "evidence": [
+        "home",
+        "pets",
+        "owners",
+        "vets",
+        "agenda",
+        "schedules",
+        "services",
+        "products",
+        "notifications",
+        "reminders",
+        "waitingRoom",
+        "dailyHistory",
+        "users",
+        "settings"
+      ]
+    },
+    {
+      "id": "VAL-01",
+      "description": "Nombres personales con números",
+      "coverage": "entrada admitida por los atributos HTML; guardado reproducido",
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "id": "VAL-02",
+      "description": "Teléfonos con letras",
+      "coverage": "entrada HTML tel; guardado reproducido",
+      "status": "PASS",
+      "evidence": {
+        "ownerPhone": "+54 381 555-0123",
+        "clinicPhone": "3815550123"
+      }
+    },
+    {
+      "id": "VAL-03",
+      "description": "Campos obligatorios que contienen solo espacios",
+      "coverage": "HTML required acepta espacios; guardado reproducido",
+      "status": "PASS",
+      "evidence": {
+        "owner": {
+          "id": "o2",
+          "name": "Ana Pérez",
+          "dni": "36555222",
+          "phone": "+54 381 555-0123",
+          "email": "owner2@example.com",
+          "address": "Av. San Martín 123, piso 2",
+          "active": true
+        }
+      }
+    },
+    {
+      "id": "VAL-04",
+      "description": "DNI inválido al invocar el guardado sin validación HTML",
+      "coverage": "solo lógica de guardado; el pattern HTML sí rechaza letras",
+      "status": "PASS",
+      "evidence": "36555222"
+    },
+    {
+      "id": "VAL-05",
+      "description": "Validación HTML de DNI y restricción durante la escritura",
+      "coverage": "inspección del formulario realmente generado",
+      "status": "PASS",
+      "evidence": "<input\n        name=\"dni\"\n        type=\"text\"\n        value=\"36555111\"\n        required pattern=\"[0-9]{7,9}\" inputmode=\"numeric\" maxlength=\"9\" data-digits=\"9\"\n      >"
+    },
+    {
+      "id": "VAL-06",
+      "description": "Validación numérica de mascotas, catálogo y servicios fuera del HTML",
+      "coverage": "solo lógica de guardado; min/step/type del HTML evitan estos valores en uso normal",
+      "status": "PASS",
+      "evidence": {
+        "pets": 2,
+        "products": 0,
+        "services": 2
+      }
+    },
+    {
+      "id": "VAL-07",
+      "description": "Datos clínicos negativos sin rango y cantidades con letras",
+      "coverage": "temperatura y cantidad admitidas por HTML; guardado reproducido",
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-08",
+      "description": "Fechas imposibles en calendario de cuidados",
+      "coverage": "solo lógica de guardado; un input date normal no produce 30 de febrero",
+      "status": "PASS",
+      "evidence": {
+        "renderError": "Fecha: elegí una fecha válida."
+      }
+    },
+    {
+      "id": "VAL-09",
+      "description": "Fechas y pesos inválidos al guardar atenciones",
+      "coverage": "solo lógica de guardado; se omiten restricciones HTML",
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-10",
+      "description": "Correos y contraseñas inválidos en guardado de cuentas",
+      "coverage": "solo lógica de guardado; type email y minlength actúan en HTML",
+      "status": "PASS",
+      "evidence": {
+        "email": "owner2@example.com",
+        "passwordLength": 6
+      }
+    },
+    {
+      "id": "DATA-01",
+      "description": "DNI duplicado y dirección alfanumérica válida",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "duplicateError": "Ya existe un propietario con ese DNI.",
+        "address": "Av. San Martín 123, piso 2"
+      }
+    },
+    {
+      "id": "DATA-02",
+      "description": "Correo de contacto duplicado al vincular cuentas de propietario",
+      "coverage": "formulario normal y vinculación por correo",
+      "status": "PASS",
+      "evidence": {
+        "candidates": [
+          {
+            "id": "094bb610-c193-4279-ba25-58212e00513d",
+            "name": "Ana Pérez"
+          }
+        ],
+        "linkedOwnerId": "094bb610-c193-4279-ba25-58212e00513d"
+      }
+    },
+    {
+      "id": "FLOW-01",
+      "description": "Crear propietario desde Usuarios requiere sección ausente en el menú del administrador",
+      "coverage": "navegación y formulario normal",
+      "status": "PASS",
+      "evidence": {
+        "menuHasOwners": false,
+        "error": "",
+        "owner": {
+          "name": "Persona Nueva",
+          "email": "persona-nueva@example.com",
+          "phone": "3815550111",
+          "dni": "36555999",
+          "address": "Av. Belgrano 123",
+          "id": "f0c16f6b-9608-4340-8be1-68df8214a1d1",
+          "active": true
+        },
+        "linkedOwnerId": "f0c16f6b-9608-4340-8be1-68df8214a1d1"
+      }
+    },
+    {
+      "id": "FLOW-02",
+      "description": "Quitar vínculo de una cuenta veterinaria existente",
+      "coverage": "opción Sin vincular disponible en el formulario",
+      "status": "PASS",
+      "evidence": {
+        "vetId": "v1",
+        "loginError": ""
+      }
+    },
+    {
+      "id": "FLOW-03",
+      "description": "Cambiar días generales conserva horarios especiales en días cerrados",
+      "coverage": "configuración y vista del propietario",
+      "status": "PASS",
+      "evidence": {
+        "days": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "scheduleStillActive": true,
+        "closedWednesdayStillShown": false
+      }
+    },
+    {
+      "id": "FLOW-04",
+      "description": "Publicación de avisos desde configuración",
+      "coverage": "control positivo con rol de propietario",
+      "status": "PASS",
+      "evidence": {
+        "visible": true
+      }
+    },
+    {
+      "id": "FLOW-05",
+      "description": "Preferencia de tema después de reiniciar la aplicación",
+      "coverage": "inicio real con tema guardado",
+      "status": "PASS",
+      "evidence": {
+        "savedBefore": "light",
+        "savedAfter": "light",
+        "applied": "light"
+      }
+    },
+    {
+      "id": "ATT-01",
+      "description": "Otro veterinario puede tomar una atención en curso",
+      "coverage": "botón Continuar atención y eventos normales",
+      "status": "PASS",
+      "evidence": {
+        "hasContinue": false,
+        "assignedVet": "v1"
+      }
+    },
+    {
+      "id": "ATT-02",
+      "description": "Guardar dos veces la misma atención genera duplicados",
+      "coverage": "eventos de guardado consecutivos sobre el mismo ingreso",
+      "status": "PASS",
+      "evidence": {
+        "clinical": 1,
+        "tickets": 1,
+        "waitingStatus": "Pendiente de cobro"
+      }
+    },
+    {
+      "id": "ATT-03",
+      "description": "Editar atención cobrada elimina precios de la medicación",
+      "coverage": "edición permitida por interfaz y guardado real",
+      "status": "PASS",
+      "evidence": {
+        "id": "t1",
+        "clinicalId": "c1",
+        "petId": "p1",
+        "ownerId": "o1",
+        "date": "2026-11-10",
+        "status": "Pagado",
+        "total": 15000,
+        "serviceAmount": 10000,
+        "medications": [
+          {
+            "name": "Medicación",
+            "quantity": "1",
+            "price": 5000
+          }
+        ]
+      }
+    },
+    {
+      "id": "ATT-04",
+      "description": "Editar atenciones de otro veterinario mediante envío alterado",
+      "coverage": "solo lógica de guardado; el botón de edición sí valida al autor",
+      "status": "PASS",
+      "evidence": {
+        "vetId": "v1",
+        "info": "Original"
+      }
+    },
+    {
+      "id": "ATT-05",
+      "description": "Ingreso activo duplicado en sala de espera",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "count": 1
+      }
+    },
+    {
+      "id": "MONEY-01",
+      "description": "Suma de precios puede desbordar y guardarse como null",
+      "coverage": "límite numérico sin máximo comercial",
+      "status": "PASS",
+      "evidence": {
+        "total": 0,
+        "status": "Pendiente de cobro"
+      }
+    },
+    {
+      "id": "MONEY-02",
+      "description": "Cobro rechaza importes negativos y exige total positivo",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "negative": "Atención / servicios: ingresá un número entero entre 0 y 1000000000.",
+        "zero": "El total debe ser mayor a 0. Cargá al menos un precio.",
+        "status": "Pendiente de cobro"
+      }
+    },
+    {
+      "id": "PERM-01",
+      "description": "Propietario no puede consultar ni editar mascotas ajenas",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "denied": true,
+        "same": true
+      }
+    },
+    {
+      "id": "PERM-02",
+      "description": "Validación de agenda personal y separación entre cuentas",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "invalid": "Elegí una fecha válida.",
+        "count": 1
+      }
+    },
+    {
+      "id": "STORE-01",
+      "description": "Fallo de persistencia revierte anotaciones",
+      "coverage": "control positivo",
+      "status": "PASS",
+      "evidence": {
+        "unchanged": true
+      }
+    },
+    {
+      "id": "PRINT-01",
+      "description": "CSS de impresión oculta el ancestro del diálogo en Vue",
+      "coverage": "confirmado por estructura y selectores; pendiente impresión en navegador",
+      "status": "PASS",
+      "evidence": {
+        "hidesRoot": false,
+        "onlyDirectDialog": false,
+        "nestedDialog": true
+      }
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 // Estas funciones trabajan sobre la base en memoria; la fachada las ejecuta
 // dentro del commit existente para conservar el guardado conjunto.
 export function saveAttentionRecord({ db, pet, entry, existing, user, data, details, uid, today, time }) {
-  const weight = Number(data.weight) || pet.weight;
-  if (data.weight) pet.weight = weight;
+  const weight = details.measurements.weight ?? pet.weight;
+  if (details.measurements.weight !== null) pet.weight = weight;
 
   const values = {
     ...details.clinical,
@@ -13,7 +13,7 @@ export function saveAttentionRecord({ db, pet, entry, existing, user, data, deta
     performed: details.performed,
     medications: details.medications,
     weight,
-    temperature: data.temperature || existing?.temperature || ''
+    temperature: details.measurements.temperature ?? ''
   };
 
   if (existing) {
@@ -52,7 +52,9 @@ export function saveAttentionTicket({ db, pet, entry, existing, user, data, deta
   // Si un registro antiguo no tiene ticket, no creamos uno nuevo al editarlo.
   if (existing) {
     const linkedTicket = db.tickets.find(item => item.id === existing.ticketId);
-    if (linkedTicket) Object.assign(linkedTicket, values);
+    // El comprobante pagado es una copia del cobro: las correcciones clínicas
+    // no modifican sus conceptos, precios ni total.
+    if (linkedTicket && !['Pagado', 'Cobrado'].includes(linkedTicket.status)) Object.assign(linkedTicket, values);
     return linkedTicket;
   }
 

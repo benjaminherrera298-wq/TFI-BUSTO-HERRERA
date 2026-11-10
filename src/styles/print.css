@@ -1,0 +1,37 @@
+@media print {
+  :root, body { background: #fff !important; color: #000 !important; }
+  body:has(#modal[open]) > :not(#vue-app),
+  body:has(#modal[open]) .application-root > :not(#modal) { display: none !important; }
+  body:has(#modal[open]) #vue-app,
+  body:has(#modal[open]) .application-root {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #modal[open] {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  #modal *, #modal .card {
+    color: #000 !important;
+    background-color: #fff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  #modal button, #modal .form-actions, #modal::backdrop { display: none !important; }
+  #modal .qr, #modal svg { filter: none !important; }
+  #modal .qr { break-inside: avoid; }
+  #modal .table-wrap { overflow: visible !important; }
+  #modal table { white-space: normal; }
+  #modal tr { break-inside: avoid; }
+}

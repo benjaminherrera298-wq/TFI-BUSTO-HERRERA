@@ -8,11 +8,11 @@ function scenario({ vaccine = false, failSave = false } = {}) {
   const db = {
     pets: [{ id: 'p1', ownerId: 'o1', name: 'Luna', weight: 5 }],
     clinical: [], tickets: [], reminders: [],
-    waitingRoom: [{ id: 'w1', petId: 'p1', status: 'En espera' }]
+    waitingRoom: [{ id: 'w1', petId: 'p1', status: 'Esperando' }]
   };
   const input = {
     db, pet: db.pets[0], entry: db.waitingRoom[0], existing: null,
-    user: { id: 'u1', vetId: 'v1', name: 'Veterinaria' },
+    user: { id: 'u1', role: 'vet', vetId: 'v1', name: 'Veterinaria' },
     attendType: 'Consulta',
     data: vaccine
       ? { reason: 'Vacunación', attType: 'Vacuna', vaccineName: 'Antirrábica',
@@ -86,6 +86,8 @@ for (const vaccine of [false, true]) {
   // Editar conserva identificadores, autor, fecha, cobro y estado de sala.
   ticket.total = 15000;
   ticket.status = 'Cobrado';
+  ticket.medications[0].price = 5000;
+  const paidSnapshot = structuredClone(ticket);
   db.waitingRoom[0].status = 'Finalizado';
   input.existing = record;
   input.entry = null;
@@ -98,7 +100,8 @@ for (const vaccine of [false, true]) {
   assert.equal(ticket.total, 15000);
   assert.equal(ticket.status, 'Cobrado');
   assert.equal(db.waitingRoom[0].status, 'Finalizado');
-  assert.equal(ticket.reason, 'Motivo corregido');
+  assert.equal(record.reason, 'Motivo corregido');
+  assert.deepEqual(ticket, paidSnapshot);
   assert.equal(db.reminders.length, vaccine ? 1 : 0);
   if (vaccine) assert.equal(db.reminders[0].date, '2028-10-23');
 

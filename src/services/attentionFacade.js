@@ -4,10 +4,12 @@ import {
   updateAttentionWaitingRoom,
   saveAttentionReminder
 } from './attentionRecords.js';
+import { clinicalMeasurements, numericValue, realDate } from './validation.js';
 
 // TP2: las validaciones y la preparación de datos no necesitan el DOM.
 // Conservamos los campos, mensajes y reglas del registro anterior.
 function prepareAttention({ data, medicationFields, attendType, pretty, careCategories, pet }) {
+  const measurements = clinicalMeasurements(data);
   if (!data.reason?.trim()) {
     throw new Error('Falta el motivo de consulta del ingreso. Pedí a Administración que lo cargue.');
   }
@@ -24,9 +26,10 @@ function prepareAttention({ data, medicationFields, attendType, pretty, careCate
     if (!vaccineDose) throw new Error('Ingresá la dosis de la vacuna.');
     if (!vaccineLot) throw new Error('Ingresá el lote de la vacuna.');
     if (!vaccineNext) throw new Error('Ingresá la próxima aplicación de la vacuna.');
+    realDate(vaccineNext, 'Próxima aplicación');
 
     return {
-      isVaccine,
+      isVaccine, measurements,
       clinical: {
         type: 'Vacuna', title: `Vacuna · ${vaccineName}`,
         vaccineName, vaccineType, vaccineDose, vaccineLot, vaccineNext
@@ -62,11 +65,15 @@ function prepareAttention({ data, medicationFields, attendType, pretty, careCate
     route: (medicationFields.routes[index] || '').trim(),
     notes: (medicationFields.notes[index] || '').trim()
   })).filter(medication => medication.name);
+  for (const medication of medications) {
+    medication.quantity = String(numericValue(medication.quantity, `Cantidad de ${medication.name}`, { min: 1, max: 1_000_000, integer: true }));
+  }
+  realDate(data.nextDate, 'Próximo cuidado', { optional: true });
   const nextCategory = careCategories.some(item => item[0] === data.nextCategory)
     ? data.nextCategory : 'Control';
 
   return {
-    isVaccine, clinical, performed, medications,
+    isVaccine, measurements, clinical, performed, medications,
     ticketMedications: medications.map(medication => ({ ...medication })),
     reminder: {
       category: nextCategory,
@@ -82,6 +89,18 @@ function prepareAttention({ data, medicationFields, attendType, pretty, careCate
 // probar el flujo sin pantallas ni localStorage y usar la base actual.
 export function createAttentionFacade({ commit, uid, today, pretty, careCategories, upsertCareReminder }) {
   function registrarAtencion(input) {
+    const { db, pet, entry, existing, user } = input;
+    if (!['vet', 'superadmin'].includes(user.role)) throw new Error('No tenés permiso para registrar atenciones.');
+    if (existing) {
+      if (!db.clinical.includes(existing) || existing.petId !== pet.id || (user.role === 'vet' && existing.vetId !== user.vetId)) {
+        throw new Error('No podés editar esta atención.');
+      }
+    } else {
+      if (!entry || !db.waitingRoom.includes(entry) || entry.petId !== pet.id || !['Esperando', 'En atención'].includes(entry.status) || db.clinical.some(record => record.waitingEntryId === entry.id) || db.tickets.some(ticket => ticket.waitingEntryId === entry.id)) {
+        throw new Error('Este ingreso ya fue atendido o no está disponible.');
+      }
+      if (user.role === 'vet' && entry.vetId && entry.vetId !== user.vetId) throw new Error('Otro veterinario está atendiendo a este paciente.');
+    }
     const details = prepareAttention({ ...input, pretty, careCategories });
     const context = {
       ...input, details, uid, today, upsertCareReminder,
