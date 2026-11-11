@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createAttentionFacade } from '../src/services/attentionFacade.js';
 
-function scenario({ vaccine = false, failSave = false } = {}) {
+function scenario({ vaccine = false, failSave = false, formatDate = value => value } = {}) {
   let sequence = 0;
   const db = {
     pets: [{ id: 'p1', ownerId: 'o1', name: 'Luna', weight: 5 }],
@@ -27,7 +27,7 @@ function scenario({ vaccine = false, failSave = false } = {}) {
   let commits = 0;
   const facade = createAttentionFacade({
     uid: () => `id-${++sequence}`,
-    today: () => '2026-10-23', pretty: value => value,
+    today: () => '2026-10-23', formatDate,
     careCategories: [['Control']],
     // Simula el contrato del commit actual, incluida la restauración.
     commit(callback) {
@@ -138,4 +138,94 @@ for (const missingReason of [false, true]) {
   assert.deepEqual(db, before);
 }
 
-console.log('OK: consultas, vacunas, edición, vínculos, recordatorios, validaciones y fallo de guardado.');
+// TP3: verificamos el resultado completo antes y después del refactor.
+{
+  const { db, input, facade } = scenario();
+  Object.assign(input.data, {
+    attObservations: '  Buen estado  ',
+    attProcedures: '  Limpieza  ',
+    attTreatments: '  Tratamiento indicado  ',
+    attIndications: '  Reposo  ',
+    attRecommendations: '  Volver al control  ',
+    nextCategory: 'Categoría inexistente',
+    nextNote: '  Revisar peso  '
+  });
+
+  facade.registrarAtencion(input);
+
+  const expectedSummary = [
+    'Observaciones: Buen estado',
+    'Procedimientos: Limpieza',
+    'Tratamientos: Tratamiento indicado',
+    'Indicaciones: Reposo',
+    'Recomendaciones: Volver al control'
+  ].join('\n');
+
+  assert.equal(db.clinical[0].performed, expectedSummary);
+  assert.equal(db.tickets[0].performed, expectedSummary);
+  assert.equal(db.reminders[0].category, 'Control');
+  assert.equal(db.reminders[0].title, 'Control · Luna');
+  assert.equal(db.reminders[0].note, 'Revisar peso');
+}
+
+{
+  const { db, input, facade } = scenario();
+  input.data.attObservations = ' ';
+  input.data.attTreatments = '  Tratamiento indicado  ';
+  input.data.nextDate = '';
+  input.medicationFields = {
+    names: [' ', '  Medicación  '],
+    doses: ['', '  1 ml  '],
+    quantities: ['ignorada', '  2  '],
+    routes: ['', '  Oral  '],
+    notes: ['', '  Con alimento  ']
+  };
+
+  facade.registrarAtencion(input);
+
+  const expectedMedication = {
+    name: 'Medicación',
+    dose: '1 ml',
+    quantity: '2',
+    route: 'Oral',
+    notes: 'Con alimento'
+  };
+
+  assert.equal(db.clinical[0].performed, 'Tratamientos: Tratamiento indicado');
+  assert.equal(db.reminders.length, 0);
+  assert.deepEqual(db.clinical[0].medications, [expectedMedication]);
+  assert.deepEqual(db.tickets[0].medications, [expectedMedication]);
+  db.clinical[0].medications[0].notes = 'Cambio posterior';
+  assert.equal(db.tickets[0].medications[0].notes, 'Con alimento');
+}
+
+{
+  const { db, input, facade } = scenario({
+    vaccine: true,
+    formatDate: value => `Fecha ${value}`
+  });
+  delete input.data.attType;
+  input.attendType = 'Vacuna';
+  Object.assign(input.data, {
+    vaccineName: '  Antirrábica  ',
+    vaccineType: '  Anual  ',
+    vaccineDose: '  1 ml  ',
+    vaccineLot: '  L1  ',
+    vaccineNext: '  2027-10-23  ',
+    attObservations: ' '
+  });
+
+  facade.registrarAtencion(input);
+
+  assert.equal(
+    db.clinical[0].performed,
+    'Vacuna: Antirrábica · Tipo: Anual · Dosis: 1 ml · Lote: L1 · Próxima aplicación: Fecha 2027-10-23'
+  );
+  assert.deepEqual(db.clinical[0].medications, []);
+  assert.deepEqual(db.tickets[0].medications, [
+    { name: 'Antirrábica', quantity: '1 ml' }
+  ]);
+  assert.equal(db.reminders[0].title, 'Próxima vacuna Antirrábica · Luna');
+}
+
+console.log('OK: consultas, vacunas, edición, vínculos, recordatorios, etiquetas, medicamentos y fallo de guardado.');
