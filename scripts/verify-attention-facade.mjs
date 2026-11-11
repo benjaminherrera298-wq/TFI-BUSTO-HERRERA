@@ -27,7 +27,7 @@ function scenario({ vaccine = false, failSave = false, formatDate = value => val
   let commits = 0;
   const facade = createAttentionFacade({
     uid: () => `id-${++sequence}`,
-    today: () => '2026-10-23', pretty: formatDate,
+    today: () => '2026-10-23', formatDate,
     careCategories: [['Control']],
     // Simula el contrato del commit actual, incluida la restauración.
     commit(callback) {

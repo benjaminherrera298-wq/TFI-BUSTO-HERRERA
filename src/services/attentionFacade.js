@@ -115,13 +115,13 @@ function prepareMedications(medicationFields) {
 // TP2 — Facade: el formulario usa una sola operación y no coordina los
 // registros internos. Pasamos las dependencias explícitamente para poder
 // probar el flujo sin pantallas ni localStorage y usar la base actual.
-export function createAttentionFacade({ commit, uid, today, pretty, careCategories, upsertCareReminder }) {
+export function createAttentionFacade({ commit, uid, today, formatDate, careCategories, upsertCareReminder }) {
   function registrarAtencion(input) {
     const details = prepareAttention({
       attentionData: input.data,
       medicationFields: input.medicationFields,
       attendType: input.attendType,
-      formatDate: pretty,
+      formatDate,
       careCategories,
       pet: input.pet
     });

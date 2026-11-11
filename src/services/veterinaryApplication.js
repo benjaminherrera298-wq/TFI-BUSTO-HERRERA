@@ -6686,7 +6686,7 @@ async function submitForm(form) {
       // La fachada coordina historia clínica, ticket, sala y recordatorio.
       // Se crea con las dependencias actuales; la base se entrega en cada llamada.
       const attentionFacade = createAttentionFacade({
-        commit, uid, today, pretty,
+        commit, uid, today, formatDate: pretty,
         careCategories: CARE_CATEGORIES,
         upsertCareReminder
       });
