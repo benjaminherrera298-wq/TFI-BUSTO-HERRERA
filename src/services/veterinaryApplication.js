@@ -1851,49 +1851,61 @@ function homeTicketsToCharge() {
   const list = pendingTickets();
 
   return `
-    <section class="card">
-      <div class="row between">
-        <h2>Tickets a cobrar</h2>
+    <section class="card pending-tickets-section">
+      <div class="pending-tickets-heading">
+        <div>
+          <div class="eyebrow">Administración · Cobros</div>
+          <h2>Tickets en espera</h2>
+          <p class="muted">Atenciones finalizadas que todavía esperan el cobro.</p>
+        </div>
         ${button('Ver sala de espera', 'nav', 'waitingRoom', 'small')}
       </div>
 
       ${
         list.length
           ? `
-            <div class="grid">
+            <div class="pending-ticket-grid">
               ${list.map(ticketItem => {
                 const pet = find('pets', ticketItem.petId);
                 const owner = find('owners', ticketItem.ownerId);
+                const petName = pet?.name || ticketItem.petName || ticketItem.petId;
+                const ownerName = owner?.name || ticketItem.ownerName || 'No disponible';
 
                 return `
-                  <article class="card waiting-card">
-                    <div class="row between">
-                      <h2>Ticket a cobrar de ${esc(pet?.name || ticketItem.petId)}</h2>
-                      ${badge(ticketItem.status)}
+                  <article class="pending-ticket-card">
+                    <div class="pending-ticket-stub" aria-hidden="true">
+                      <span>EN ESPERA</span>
+                      <strong>${esc(ticketItem.number)}</strong>
                     </div>
 
-                    <p class="muted">
-                      Ticket ${esc(ticketItem.number)} ·
-                      ${pretty(ticketItem.date)}${ticketItem.time ? ' · ' + esc(ticketItem.time) : ''}<br>
-                      Propietario: ${esc(owner?.name || 'No disponible')}<br>
-                      Veterinario: ${esc(ticketItem.vetName || 'No disponible')}
-                    </p>
+                    <div class="pending-ticket-content">
+                      <header class="pending-ticket-top">
+                        <div>
+                          <span class="pending-ticket-label">Ticket ${esc(ticketItem.number)}</span>
+                          <h3>${esc(petName)}</h3>
+                        </div>
+                        ${badge(ticketItem.status)}
+                      </header>
 
-                    <p><small>Motivo:</small> ${esc(ticketItem.reason || '—')}</p>
+                      <div class="pending-ticket-meta">
+                        <span><small>Propietario</small>${esc(ownerName)}</span>
+                        <span><small>Fecha y hora</small>${pretty(ticketItem.date)}${ticketItem.time ? ' · ' + esc(ticketItem.time) : ''}</span>
+                        <span><small>Veterinario</small>${esc(ticketItem.vetName || 'No disponible')}</span>
+                      </div>
 
-                    <p>
-                      <small>Monto a pagar:</small>
-                      <b>${ticketItem.total > 0 ? money(ticketItem.total) : 'A definir'}</b>
-                    </p>
+                      <p class="pending-ticket-reason"><small>Motivo</small>${esc(ticketItem.reason || '—')}</p>
 
-                    <div class="row">
-                      ${
-                        pet
-                          ? button('Ver mascota', 'pet', pet.id, 'small')
-                          : ''
-                      }
+                      <footer class="pending-ticket-footer">
+                        <div>
+                          <small>Monto</small>
+                          <strong>${ticketItem.total > 0 ? money(ticketItem.total) : 'A definir'}</strong>
+                        </div>
 
-                      ${button('Ver ticket y cobrar', 'admin-charge', ticketItem.id, 'small primary')}
+                        <div class="row">
+                          ${pet ? button('Ver mascota', 'pet', pet.id, 'small') : ''}
+                          ${button('Abrir y cobrar', 'admin-charge', ticketItem.id, 'small primary')}
+                        </div>
+                      </footer>
                     </div>
                   </article>
                 `;
@@ -5175,50 +5187,74 @@ function chargeTicketModal(ticketId) {
   }));
 
   modal(
-    `Ticket a cobrar de ${pet?.name || ticketItem.petName || 'mascota'}`,
+    `Cobrar ticket ${esc(ticketItem.number)}`,
     `
-      <div class="owner-box">
-        <h3>Código de ticket ${esc(ticketItem.number)} · ${badge(ticketItem.status)}</h3>
-        <div class="form-grid">
-          <p><small>Mascota</small><br>${esc(pet?.name || ticketItem.petName || 'No disponible')}</p>
-          <p><small>Código mascota (5 dígitos)</small><br><b style="letter-spacing:0.2rem;">${esc(pet?.code || ticketItem.petCode || '—')}</b></p>
-          <p><small>Propietario</small><br>${esc(owner?.name || ticketItem.ownerName || 'No disponible')}</p>
-          <p><small>Fecha</small><br>${pretty(ticketItem.date)}</p>
-          <p><small>Hora</small><br>${esc(ticketItem.time || '—')}</p>
-          <p><small>Veterinario</small><br>${esc(ticketItem.vetName || 'No disponible')}</p>
-        </div>
-        <p><small>Motivo:</small> ${esc(ticketItem.reason || '—')}</p>
-        <p><small>Atención realizada:</small> ${esc(ticketItem.performed || '—')}</p>
-      </div>
+      <div class="ticket-payment-shell">
+        <section class="ticket-payment-summary">
+          <div class="ticket-payment-kicker">Ticket en espera</div>
+          <div class="ticket-payment-title">
+            <div>
+              <span>Ticket ${esc(ticketItem.number)}</span>
+              <h3>${esc(pet?.name || ticketItem.petName || 'Mascota')}</h3>
+            </div>
+            ${badge(ticketItem.status)}
+          </div>
 
-      <form data-form="charge" data-id="${esc(ticketItem.id)}">
-        <div class="ticket-box">
-          <h3>Precios por medicamento</h3>
-          <p class="muted">Cargá el precio de cada medicamento. El total se genera automáticamente.</p>
-          <div id="charge-med-rows">
-            ${
-              meds.length
-                ? meds.map(chargeMedRow).join('')
-                : '<p class="muted">Sin medicamentos indicados por el veterinario.</p>'
-            }
+          <div class="ticket-payment-data">
+            <span><small>Propietario</small>${esc(owner?.name || ticketItem.ownerName || 'No disponible')}</span>
+            <span><small>Código mascota</small><b>${esc(pet?.code || ticketItem.petCode || '—')}</b></span>
+            <span><small>Fecha</small>${pretty(ticketItem.date)}</span>
+            <span><small>Hora</small>${esc(ticketItem.time || '—')}</span>
+            <span><small>Veterinario</small>${esc(ticketItem.vetName || 'No disponible')}</span>
           </div>
-          <div class="form-grid" style="margin-top:10px;">
-            ${field(
-              'serviceAmount',
-              'Monto por atención / servicios ($)',
-              ticketItem.serviceAmount ?? '',
-              'number',
-              'min="0" step="1" data-charge-price'
-            )}
+
+          <div class="ticket-payment-care">
+            <p><small>Motivo</small>${esc(ticketItem.reason || '—')}</p>
+            <p><small>Atención realizada</small>${esc(ticketItem.performed || '—')}</p>
           </div>
-          <p class="charge-total">Total automático: <b id="charge-total">$0</b></p>
-        </div>
-        <div id="form-error" class="error" role="alert"></div>
-        <div class="form-actions">
-          ${button('Cancelar', 'close')}
-          <button class="primary" type="submit">Confirmar cobro</button>
-        </div>
-      </form>
+        </section>
+
+        <form class="ticket-payment-form" data-form="charge" data-id="${esc(ticketItem.id)}">
+          <section class="ticket-price-panel">
+            <div class="ticket-price-heading">
+              <div>
+                <span>Detalle del cobro</span>
+                <h3>Conceptos y precios</h3>
+              </div>
+              <small>El total se calcula automáticamente.</small>
+            </div>
+
+            <div id="charge-med-rows">
+              ${
+                meds.length
+                  ? meds.map(chargeMedRow).join('')
+                  : '<p class="muted">Sin medicamentos indicados por el veterinario.</p>'
+              }
+            </div>
+
+            <div class="ticket-service-price">
+              ${field(
+                'serviceAmount',
+                'Monto por atención / servicios ($)',
+                ticketItem.serviceAmount ?? '',
+                'number',
+                'min="0" step="1" data-charge-price'
+              )}
+            </div>
+
+            <div class="ticket-charge-total">
+              <span>Total a cobrar</span>
+              <b id="charge-total">$0</b>
+            </div>
+          </section>
+
+          <div id="form-error" class="error" role="alert"></div>
+          <div class="form-actions">
+            ${button('Cancelar', 'close')}
+            <button class="primary" type="submit">Confirmar cobro</button>
+          </div>
+        </form>
+      </div>
     `
   );
 
@@ -5237,68 +5273,107 @@ function ticketDetailModal(ticketId) {
 
   const pet = find('pets', ticketItem.petId);
   const owner = find('owners', ticketItem.ownerId);
+  const paid = ['Pagado', 'Cobrado'].includes(ticketItem.status);
 
   modal(
-    `Ticket ${esc(ticketItem.number)} · ${esc(pet?.name || ticketItem.petName || 'mascota')}`,
+    `${paid ? 'Comprobante de pago' : 'Detalle del ticket'} · ${esc(ticketItem.number)}`,
     `
-      <div class="owner-box">
-        <h3>Código de ticket ${esc(ticketItem.number)} · ${badge(ticketItem.status)}</h3>
-        <div class="form-grid">
-          <p><small>Mascota</small><br>${esc(pet?.name || ticketItem.petName || 'No disponible')}</p>
-          <p><small>Código mascota (5 dígitos)</small><br><b style="letter-spacing:0.2rem;">${esc(pet?.code || ticketItem.petCode || '—')}</b></p>
-          <p><small>Propietario</small><br>${esc(owner?.name || ticketItem.ownerName || 'No disponible')}</p>
-          <p><small>Fecha</small><br>${pretty(ticketItem.date)}</p>
-          <p><small>Hora</small><br>${esc(ticketItem.time || '—')}</p>
-          <p><small>Veterinario</small><br>${esc(ticketItem.vetName || 'No disponible')}</p>
-        </div>
-        <p><small>Motivo:</small> ${esc(ticketItem.reason || '—')}</p>
-        <p><small>Atención realizada:</small> ${esc(ticketItem.performed || '—')}</p>
-        <h3>Medicamentos y precios</h3>
-        ${
-          normMeds(ticketItem.medications).length
-            ? `
-              <div class="table-wrap">
-                <table class="ticket-lines">
-                  <thead>
-                    <tr><th>Medicamento</th><th>Dosis / Cant. / Vía</th><th>Precio</th></tr>
-                  </thead>
-                  <tbody>
-                    ${normMeds(ticketItem.medications).map(medication => {
-                      const doseCant = [
-                        medication.dose ? `Dosis: ${medication.dose}` : '',
-                        medication.quantity ? `Cant.: ${medication.quantity}` : '',
-                        medication.route ? `Vía: ${medication.route}` : '',
-                        medication.notes ? `Obs.: ${medication.notes}` : ''
-                      ].filter(Boolean).join(' · ') || '—';
-                      return `
-                      <tr>
-                        <td>${esc(medication.name || '—')}</td>
-                        <td>${esc(doseCant)}</td>
-                        <td>${Number.isFinite(Number(medication.price)) ? money(Number(medication.price)) : '—'}</td>
-                      </tr>
-                    `;}).join('')}
-                  </tbody>
-                </table>
+      <div class="receipt-shell">
+        <article class="payment-receipt">
+          <header class="receipt-header">
+            <div class="receipt-brand">
+              <span class="receipt-mark">+</span>
+              <div>
+                <small>COMPROBANTE VETERINARIO</small>
+                <h3>${esc(db.config?.name || 'Gestión veterinaria')}</h3>
               </div>
-            `
-            : '<p class="muted">Sin medicamentos.</p>'
-        }
-        ${
-          Number(ticketItem.serviceAmount) > 0
-            ? `<p><small>Atención / servicios:</small> ${money(Number(ticketItem.serviceAmount))}</p>`
-            : ''
-        }
-        <p class="charge-total">Total: <b>${ticketItem.total > 0 ? money(ticketItem.total) : 'A definir'}</b></p>
-        ${
-          ticketItem.paidAt
-            ? `<p class="muted"><small>Cobrado el ${new Date(ticketItem.paidAt).toLocaleString('es-AR')}</small></p>`
-            : ''
-        }
-      </div>
+            </div>
+            <div class="receipt-state">
+              <span>${paid ? 'Pago realizado' : 'Ticket pendiente'}</span>
+              ${badge(ticketItem.status)}
+            </div>
+          </header>
 
-      <div class="form-actions">
-        ${button('Cerrar', 'close')}
-        ${button('Imprimir', 'print', '', 'primary')}
+          <section class="receipt-ticket-title">
+            <div>
+              <small>NÚMERO DE COMPROBANTE</small>
+              <strong>${esc(ticketItem.number)}</strong>
+            </div>
+            <div>
+              <small>FECHA Y HORA</small>
+              <strong>${pretty(ticketItem.date)}${ticketItem.time ? ' · ' + esc(ticketItem.time) : ''}</strong>
+            </div>
+          </section>
+
+          <section class="receipt-data-grid">
+            <div><small>Mascota</small><strong>${esc(pet?.name || ticketItem.petName || 'No disponible')}</strong></div>
+            <div><small>Código mascota</small><strong>${esc(pet?.code || ticketItem.petCode || '—')}</strong></div>
+            <div><small>Propietario</small><strong>${esc(owner?.name || ticketItem.ownerName || 'No disponible')}</strong></div>
+            <div><small>Veterinario</small><strong>${esc(ticketItem.vetName || 'No disponible')}</strong></div>
+          </section>
+
+          <section class="receipt-care-summary">
+            <p><small>Motivo</small>${esc(ticketItem.reason || '—')}</p>
+            <p><small>Atención realizada</small>${esc(ticketItem.performed || '—')}</p>
+          </section>
+
+          <div class="table-wrap receipt-lines-wrap">
+            <table class="ticket-lines receipt-lines">
+              <thead>
+                <tr><th>Concepto</th><th>Detalle</th><th>Importe</th></tr>
+              </thead>
+              <tbody>
+                ${normMeds(ticketItem.medications).map(medication => {
+                  const doseCant = [
+                    medication.dose ? `Dosis: ${medication.dose}` : '',
+                    medication.quantity ? `Cant.: ${medication.quantity}` : '',
+                    medication.route ? `Vía: ${medication.route}` : '',
+                    medication.notes ? `Obs.: ${medication.notes}` : ''
+                  ].filter(Boolean).join(' · ') || '—';
+                  return `
+                    <tr>
+                      <td>${esc(medication.name || 'Medicamento')}</td>
+                      <td>${esc(doseCant)}</td>
+                      <td>${Number.isFinite(Number(medication.price)) ? money(Number(medication.price)) : '—'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+                ${
+                  Number(ticketItem.serviceAmount) > 0
+                    ? `<tr><td>Atención / servicios</td><td>Servicio veterinario</td><td>${money(Number(ticketItem.serviceAmount))}</td></tr>`
+                    : ''
+                }
+                ${
+                  !normMeds(ticketItem.medications).length && !(Number(ticketItem.serviceAmount) > 0)
+                    ? '<tr><td colspan="3">Sin conceptos cargados.</td></tr>'
+                    : ''
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <section class="receipt-total">
+            <span>Total abonado</span>
+            <strong>${ticketItem.total > 0 ? money(ticketItem.total) : 'A definir'}</strong>
+          </section>
+
+          ${
+            ticketItem.paidAt
+              ? `<p class="receipt-paid-at">Cobrado el ${new Date(ticketItem.paidAt).toLocaleString('es-AR')}</p>`
+              : ''
+          }
+
+          <footer class="receipt-footer">
+            <div class="receipt-barcode" aria-hidden="true"></div>
+            <strong>${esc(ticketItem.number)}</strong>
+            <small>Conservá este comprobante como constancia del pago.</small>
+          </footer>
+        </article>
+
+        <div class="form-actions receipt-actions">
+          ${button('Cerrar', 'close')}
+          ${button('Imprimir comprobante', 'print', '', 'primary')}
+        </div>
       </div>
     `
   );
