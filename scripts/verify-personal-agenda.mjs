@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { startVeterinaryApplication } from '../src/services/veterinaryApplication.js';
+import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
 
 // Prueba los formularios y eventos reales. La presentación se revisa en navegador.
 const KEY = 'veterinaria-prototipo-v1';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { startVeterinaryApplication } from '../src/services/veterinaryApplication.js';
-import { PET_AVATARS } from '../src/services/petAvatars.js';
+import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
+import { PET_AVATARS } from '../src/data/petAvatars.js';
 
 // Exercise the real application entry point and delegated event handlers.
 // These mocks capture rendered HTML; they do not assess browser layout.

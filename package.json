@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test",
+    "test:regression": "node scripts/verify-attention-facade.mjs && node scripts/verify-personal-agenda.mjs && node scripts/verify-pet-avatars.mjs && node scripts/audit-system.mjs"
   },
   "dependencies": { "vue": "^3.5.0" },
   "devDependencies": { "@vitejs/plugin-vue": "^6.0.0", "vite": "^7.0.0" }

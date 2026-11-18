@@ -1,8 +1,8 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue';
-import ToastMessage from './components/ToastMessage.vue';
-import { createScreenRenderer } from './services/screenRenderer';
-import { startVeterinaryApplication } from './services/veterinaryApplication';
+import ToastMessage from './components/shared/ToastMessage.vue';
+import { createScreenRenderer } from './legacy/screenRenderer';
+import { startVeterinaryApplication } from './legacy/veterinaryApplication';
 
 const container = ref(null);
 const message = ref('');

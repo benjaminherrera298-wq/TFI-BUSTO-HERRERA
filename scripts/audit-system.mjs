@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { startVeterinaryApplication } from '../src/services/veterinaryApplication.js';
+import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
 
 // Auditoría aislada: ejecuta eventos reales con almacenamiento ficticio.
 // No simula las restricciones nativas del navegador ni evalúa el diseño visual.
@@ -350,7 +350,7 @@ await check('PRINT-01', 'CSS de impresión oculta el ancestro del diálogo en Vu
 });
 
 const summary = Object.fromEntries(['PASS', 'FINDING', 'HARNESS_ERROR'].map(status => [status, results.filter(result => result.status === status).length]));
-const output = new URL('../reports/testing-2026-11-06-results.json', import.meta.url);
+const output = new URL('../reports/audit-system-latest.json', import.meta.url);
 await mkdir(new URL('../reports/', import.meta.url), { recursive: true });
 await writeFile(output, JSON.stringify({ generatedAt: new Date().toISOString(), scope: 'Pruebas aisladas de eventos, revisión de atributos HTML y código. Sin navegador real.', summary, results }, null, 2) + '\n');
 for (const result of results) console.log(`${result.status}: ${result.id} — ${result.description}`);

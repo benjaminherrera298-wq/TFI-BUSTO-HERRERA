@@ -1,7 +1,7 @@
-import { createAttentionFacade } from './attentionFacade.js';
-import { populateSamplePractice } from './samplePractice.js';
-import { PET_AVATARS, findPetAvatar } from './petAvatars.js';
-import { MAX_MONEY, requiredText, personName, phoneNumber, documentNumber, emailAddress, passwordValue, numericValue, realDate, clockTime, validateOwner, assertUniqueOwner, validateEntity, clinicalMeasurements } from './validation.js';
+import { createAttentionFacade } from '../services/attentionFacade.js';
+import { populateSamplePractice } from '../data/samplePractice.js';
+import { PET_AVATARS, findPetAvatar } from '../data/petAvatars.js';
+import { MAX_MONEY, requiredText, personName, phoneNumber, documentNumber, emailAddress, passwordValue, numericValue, realDate, clockTime, validateOwner, assertUniqueOwner, validateEntity, clinicalMeasurements } from '../services/validation.js';
 
 export function startVeterinaryApplication(ui) {
 'use strict';

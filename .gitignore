@@ -2,3 +2,9 @@ node_modules/
 dist/
 .DS_Store
 .visual-*/
+.worktrees/
+.vite/
+coverage/
+*.log
+Thumbs.db
+/reports/audit-system-latest.json
