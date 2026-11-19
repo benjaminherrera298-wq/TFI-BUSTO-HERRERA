@@ -3482,74 +3482,35 @@ function visibleNotices() {
 }
 
 function catalog() {
-  const rows = db.products
-    .filter(product => isAdmin() || product.active)
+  const canManage = isAdmin();
+  const products = db.products
+    .filter(product => canManage || product.active)
     .filter(matches)
     .filter(product => !filter || product.category === filter);
 
-  return heading(
-    'Catálogo',
-    `Productos disponibles en ${esc(db.config.name)}. Consultas: ${esc(db.config.phone)}.`,
-    isAdmin()
-      ? button('+ Nuevo producto', 'create', 'products', 'primary')
-      : ''
-  ) +
-  toolbar([...new Set(db.products.map(product => product.category))]) +
-  `
-    <div class="grid">
-      ${
-        rows.map(product => `
-          <article class="card">
-            ${
-              product.photo
-                ? `
-                  <img
-                    class="product-img"
-                    src="${esc(product.photo)}"
-                    alt="${esc(product.name)}"
-                  >
-                `
-                : `<div class="product-img">${icon('bag')}</div>`
-            }
-
-            <small>${esc(product.category)}</small>
-            <h2>${esc(product.name)}</h2>
-            <p class="muted">${esc(product.description)}</p>
-
-            <div class="row between">
-              <b>${money(product.price)}</b>
-              ${badge(product.stock > 0 ? 'Disponible' : 'Sin stock')}
-            </div>
-
-            <p>
-              <small>
-                ${product.stock} unidades ·
-                ${product.active ? 'Publicado' : 'Inactivo'}
-              </small>
-            </p>
-
-            ${
-              isAdmin()
-                ? button(
-                    'Editar',
-                    'edit',
-                    'products:' + product.id,
-                    'small'
-                  ) + ' ' +
-                  button(
-                    product.active ? 'Desactivar' : 'Activar',
-                    'toggle',
-                    'products:' + product.id,
-                    'small'
-                  )
-                : ''
-            }
-          </article>
-        `).join('') ||
-        '<p class="empty">No se encontraron productos.</p>'
-      }
-    </div>
-  `;
+  ui.showCatalog($('#content'), {
+    clinicName: db.config.name,
+    clinicPhone: db.config.phone,
+    products,
+    categories: [...new Set(db.products.map(product => product.category))],
+    canManage,
+    query,
+    category: filter,
+    formatMoney: money,
+    onSearch: value => {
+      query = value;
+      page = 1;
+      renderContent();
+    },
+    onFilter: value => {
+      filter = value;
+      page = 1;
+      renderContent();
+    },
+    onCreate: () => action('create', 'products').catch(error => toast(error.message)),
+    onEdit: id => action('edit', 'products:' + id).catch(error => toast(error.message)),
+    onToggle: id => action('toggle', 'products:' + id).catch(error => toast(error.message))
+  });
 }
 
 function noticesView(inSettings = false) {
@@ -3982,8 +3943,8 @@ function renderContent() {
       break;
 
     case 'products':
-      html = catalog();
-      break;
+      catalog();
+      return;
 
     case 'notices':
       html = noticesView();

@@ -24,7 +24,7 @@ export function createScreenRenderer() {
     return h(node.localName, props, [...node.childNodes].map(toVNode).filter(v => v !== null));
   }
 
-  function setHtml(target, html) {
+  function prepareTarget(target) {
     if (!target) throw new Error('No se encontró el contenedor de la pantalla.');
     // Las pantallas pueden contener regiones renderizadas independientemente.
     for (const child of [...mounted]) {
@@ -33,6 +33,10 @@ export function createScreenRenderer() {
         mounted.delete(child);
       }
     }
+  }
+
+  function setHtml(target, html) {
+    prepareTarget(target);
     const template = document.createElement('template');
     template.innerHTML = String(html);
     const nodes = [...template.content.childNodes].map(toVNode).filter(v => v !== null);
@@ -41,10 +45,17 @@ export function createScreenRenderer() {
     mounted.add(target);
   }
 
+  function setComponent(target, component, props) {
+    prepareTarget(target);
+    // Sin una clave nueva, las actualizaciones reutilizan la instancia del componente.
+    render(h(component, props), target);
+    mounted.add(target);
+  }
+
   function dispose() {
     for (const target of [...mounted].reverse()) render(null, target);
     mounted.clear();
   }
 
-  return { setHtml, dispose };
+  return { setHtml, setComponent, dispose };
 }

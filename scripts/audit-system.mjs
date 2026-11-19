@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import { loadVueComponent } from '../tests/helpers/loadVueComponent.js';
+
+const CatalogView = await loadVueComponent(new URL('../src/views/catalog/CatalogView.vue', import.meta.url));
 
 // Auditoría aislada: ejecuta eventos reales con almacenamiento ficticio.
 // No simula las restricciones nativas del navegador ni evalúa el diseño visual.
@@ -47,10 +52,15 @@ function harness(initial = fixture(), { theme = 'dark', savedTheme, lockedRole =
   const nodes = new Map(['app', 'content', 'modal', 'form-error', 'global-results'].map(id => [`#${id}`, node(id)]));
   const handlers = new Map();
   const messages = [];
+  let catalogRender = Promise.resolve();
   const stop = startVeterinaryApplication({ lockedRole,
     root: { querySelector: selector => nodes.get(selector) ?? null, querySelectorAll: () => [] },
     on: (name, callback) => handlers.set(name, callback),
     setHtml(target, html) { assert.ok(target, 'Expected a render target'); target.html = html; },
+    showCatalog(target, props) {
+      assert.ok(target, 'Expected a catalog render target');
+      catalogRender = renderToString(createSSRApp(CatalogView, props)).then(html => { target.html = html; });
+    },
     notify: message => messages.push(message)
   });
   return {
@@ -64,10 +74,11 @@ function harness(initial = fixture(), { theme = 'dark', savedTheme, lockedRole =
       const submit = { disabled: false, isConnected: true };
       const form = { values, dataset: { form: kind, id }, elements: { logo: { files: [] }, photo: { files: [] } }, matches: selector => selector === 'form[data-form]', querySelector: () => submit };
       await handlers.get('submit')({ target: form, preventDefault() {} });
+      await catalogRender;
       return nodes.get('#form-error').textContent;
     },
     async login(id = 'admin') { const error = await this.submit('login', { email: `${id}@example.com`, password: '123456' }); assert.equal(error, ''); },
-    async click(action, id = '') { const target = { ...node(), dataset: { action, id } }; target.closest = () => target; handlers.get('click')({ target }); await nextTurn(); },
+    async click(action, id = '') { const target = { ...node(), dataset: { action, id } }; target.closest = () => target; handlers.get('click')({ target }); await nextTurn(); await catalogRender; },
     change(id, value) { handlers.get('change')({ target: { id, value, closest: () => null } }); }
     ,input(target) { handlers.get('input')({ target }); }
   };

@@ -27,6 +27,9 @@ src/
   components/
     shared/
       ToastMessage.vue
+  views/
+    catalog/
+      CatalogView.vue
   data/
     samplePractice.js
     petAvatars.js
@@ -43,14 +46,16 @@ src/
     print.css
 ```
 
-`components/shared/` contiene componentes reutilizables de Vue. `data/` reúne la carga de datos ficticios y el catálogo de avatares. `services/` conserva las operaciones de atención y las validaciones ya separadas. `legacy/` identifica los módulos que todavía generan las pantallas mediante HTML y su adaptador a Vue.
+`components/shared/` contiene componentes reutilizables de Vue. `views/` contiene las pantallas ya migradas: por ahora, únicamente Catálogo. `data/` reúne la carga de datos ficticios y el catálogo de avatares. `services/` conserva las operaciones de atención y las validaciones ya separadas. `legacy/` mantiene la navegación y las pantallas que todavía se generan mediante HTML.
 
 Fuera de `src/` se mantienen `public/assets/`, `scripts/`, `tests/`, `reports/` y los archivos de configuración del proyecto.
 
 ## Alcance de la migración
-Se utiliza Vue 3 y Vite. Vue monta la aplicación, administra los eventos principales y renderiza las pantallas mediante nodos virtuales. En la etapa 2 se organizaron los archivos existentes por responsabilidad; `App.vue` mantiene su funcionamiento y solo cambió las rutas de tres importaciones.
+Se utiliza Vue 3 y Vite. En la etapa 2 se organizaron los archivos existentes por responsabilidad. En esta primera parte de la etapa 3 se migró únicamente Catálogo a `views/catalog/CatalogView.vue`, con un template real, propiedades reactivas y eventos Vue. No utiliza `v-html`.
 
-Las funciones que generan el contenido de cada pantalla siguen en `legacy/veterinaryApplication.js` como cadenas HTML y se convierten a nodos Vue mediante `legacy/screenRenderer.js`. Todavía no están divididas en vistas `.vue` individuales. Algunas actualizaciones puntuales de formularios conservan acceso directo al DOM para mantener el comportamiento original. Esa migración corresponde a la etapa 3.
+La navegación y las operaciones siguen bajo el control de `legacy/veterinaryApplication.js`. Para Catálogo, ese módulo entrega datos y recibe acciones mediante una función `showCatalog` conectada desde `App.vue`. El renderizador comparte la limpieza de contenedores entre la vista nueva y las pantallas anteriores, de modo que se desmontan antes de reemplazar su contenedor padre.
+
+Las demás pantallas y los formularios de alta y edición conservan su implementación anterior. La vista nueva reutiliza sus permisos, filtros, formato monetario, validaciones y operaciones. No se instalaron Vue Router, Pinia ni otras dependencias.
 
 La inicialización y la suscripción de almacenamiento tienen limpieza al desmontar. Los estilos y el comportamiento del prototipo local se conservaron.
 
@@ -72,7 +77,7 @@ npm test
 npm run test:regression
 ```
 
-`npm test` ejecuta las pruebas independientes de validaciones y datos de demostración con el ejecutor incluido en Node.js. `npm run test:regression` mantiene las verificaciones de atenciones, agenda, avatares y auditoría. Utilizan datos ficticios en memoria y no acceden a los datos del navegador.
+`npm test` ejecuta las pruebas de validaciones, datos de demostración y la primera vista Vue con el ejecutor incluido en Node.js. Las pruebas de Catálogo compilan el archivo `.vue` con las herramientas ya incluidas en Vue y comprueban su presentación y eventos en memoria. `npm run test:regression` mantiene las verificaciones de atenciones, agenda, avatares y auditoría; la auditoría renderiza también el componente real del catálogo. No acceden a los datos del navegador y no reemplazan una revisión visual en un navegador real.
 
 La auditoría escribe `reports/audit-system-latest.json`, un resultado generado que Git ignora. Los informes históricos se conservan.
 
@@ -82,4 +87,4 @@ Si la carga habitual de la configuración de Vite falla por permisos del entorno
 npm run build -- --configLoader native
 ```
 
-El [informe de la etapa 1](reports/etapa-1-revision.md) conserva el diagnóstico y las rutas que existían antes de la reorganización. El [informe de la etapa 2](reports/etapa-2-organizacion.md) documenta la estructura vigente, los movimientos, las importaciones corregidas y la comparación de las verificaciones. Las rutas de los informes anteriores son referencias históricas; la tabla de movimientos de etapa 2 indica sus ubicaciones actuales.
+El [informe de la etapa 1](reports/etapa-1-revision.md) conserva el diagnóstico inicial. El [informe de la etapa 2](reports/etapa-2-organizacion.md) documenta la reorganización de archivos. El [informe de la primera vista Vue](reports/etapa-3-primera-vista-vue.md) explica la migración de Catálogo, su integración y las verificaciones. Los informes anteriores describen el estado de cada etapa y se conservan como referencia histórica.

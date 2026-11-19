@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue';
 import ToastMessage from './components/shared/ToastMessage.vue';
+import CatalogView from './views/catalog/CatalogView.vue';
 import { createScreenRenderer } from './legacy/screenRenderer';
 import { startVeterinaryApplication } from './legacy/veterinaryApplication';
 
@@ -27,6 +28,7 @@ onMounted(() => {
     root: container.value,
     lockedRole: roles[requestedRole] ?? null,
     setHtml: screens.setHtml,
+    showCatalog: (target, props) => screens.setComponent(target, CatalogView, props),
     notify,
     on: (type, handler) => { handlers[type] = handler; }
   });
