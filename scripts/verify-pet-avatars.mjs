@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
 import { PET_AVATARS } from '../src/data/petAvatars.js';
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import { loadVueComponent } from '../tests/helpers/loadVueComponent.js';
+import { renderApplicationView } from '../tests/helpers/loadViewComponents.js';
+
+const PetsView = await loadVueComponent(new URL('../src/views/pets/PetsView.vue', import.meta.url));
 
 // Exercise the real application entry point and delegated event handlers.
 // These mocks capture rendered HTML; they do not assess browser layout.
@@ -53,6 +59,8 @@ function createSession() {
   const handlers = new Map();
   const nodes = new Map();
   const notifications = [];
+  let petsRender = Promise.resolve();
+  let viewRender = Promise.resolve();
   for (const id of ['app', 'content', 'modal', 'form-error', 'owner-pet-photo-input']) {
     nodes.set(`#${id}`, {
       id, html: '', open: false, clicks: 0,
@@ -66,6 +74,14 @@ function createSession() {
     root: { querySelector: selector => nodes.get(selector) ?? null, querySelectorAll: () => [] },
     on: (eventName, callback) => handlers.set(eventName, callback),
     setHtml: (node, html) => { assert.ok(node, 'Render target must exist'); node.html = html; },
+    showView(target, name, props) {
+      assert.ok(target, 'Expected a Vue render target');
+      viewRender = renderApplicationView(name, props).then(html => { target.html = html; });
+    },
+    showPets(target, props) {
+      assert.ok(target, 'Pets render target must exist');
+      petsRender = renderToString(createSSRApp(PetsView, props)).then(html => { target.html = html; });
+    },
     notify: message => notifications.push(message)
   };
   const stop = startVeterinaryApplication(ui);
@@ -75,16 +91,18 @@ function createSession() {
       const target = { dataset: { action, id }, closest: () => target };
       handlers.get('click')({ target });
       await nextTurn();
+      await Promise.all([petsRender, viewRender]);
     },
     async login() {
       const submit = { disabled: false, isConnected: true };
       const form = {
         dataset: { form: 'login' }, values: { email: 'owner@example.com', password: '123456' },
         matches: selector => selector === 'form[data-form]',
-        querySelector: () => submit
+        querySelector: selector => selector === '[data-form-error]' ? nodes.get('#form-error') : submit
       };
       await handlers.get('submit')({ target: form, preventDefault() {} });
-      assert.equal(nodes.get('#form-error').textContent, undefined, 'Login must succeed');
+      await Promise.all([petsRender, viewRender]);
+      assert.equal(nodes.get('#form-error').textContent, '', 'Login must succeed');
       assert.match(nodes.get('#content').html, /Manchas/);
     },
     async upload(file) {
@@ -93,6 +111,7 @@ function createSession() {
       input.value = 'fake-file';
       handlers.get('change')({ target: input });
       await nextTurn();
+      await Promise.all([petsRender, viewRender]);
     }
   };
 }

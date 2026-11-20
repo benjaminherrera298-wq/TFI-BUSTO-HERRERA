@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { mock } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import { loadVueComponent } from '../tests/helpers/loadVueComponent.js';
+import { renderApplicationView } from '../tests/helpers/loadViewComponents.js';
+
+const NoticesView = await loadVueComponent(new URL('../src/views/notices/NoticesView.vue', import.meta.url));
+const PetsView = await loadVueComponent(new URL('../src/views/pets/PetsView.vue', import.meta.url));
+
+// El calendario se verifica siempre en el mismo mes, independientemente del día de ejecución.
+mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 9, 12) });
 
 // Prueba los formularios y eventos reales. La presentación se revisa en navegador.
 const KEY = 'veterinaria-prototipo-v1';
@@ -45,14 +56,53 @@ globalThis.FormData = class {
 
 function createSession() {
   const handlers = new Map();
-  const nodes = new Map(['app', 'content', 'modal', 'form-error'].map(id => [`#${id}`, {
+  const nodes = new Map(['app', 'content', 'modal', 'form-error', 'settings-notices'].map(id => [`#${id}`, {
     id, html: '', open: false, textContent: '', showModal() { this.open = true; }, close() { this.open = false; }
   }]));
   const messages = [];
+  let noticesRender = Promise.resolve();
+  let petsRender = Promise.resolve();
+  let viewRender = Promise.resolve();
+  let contentHtml = '';
+  let noticesHtml = '';
+  function composeSettings() {
+    nodes.get('#content').html = contentHtml.replace(
+      /(<section\b[^>]*\bid="settings-notices"[^>]*>)[\s\S]*?(<\/section>)/,
+      (match, open, close) => open + noticesHtml + close
+    );
+  }
   const stop = startVeterinaryApplication({
     root: { querySelector: selector => nodes.get(selector) ?? null, querySelectorAll: () => [] },
     on: (name, callback) => handlers.set(name, callback),
-    setHtml: (node, html) => { assert.ok(node); node.html = html; },
+    setHtml(target, html) {
+      assert.ok(target);
+      target.html = html;
+      if (target.id === 'content') contentHtml = html;
+    },
+    showView(target, name, props) {
+      assert.ok(target, 'Expected a Vue render target');
+      viewRender = renderApplicationView(name, props).then(html => {
+        target.html = html;
+        if (target.id === 'content') {
+          contentHtml = html;
+          if (name === 'SettingsView') composeSettings();
+        }
+      });
+    },
+    showPets(target, props) {
+      assert.ok(target);
+      petsRender = renderToString(createSSRApp(PetsView, props)).then(html => { target.html = html; });
+    },
+    showNotices(target, props) {
+      assert.ok(target);
+      noticesRender = renderToString(createSSRApp(NoticesView, props)).then(html => {
+        target.html = html;
+        if (target.id === 'settings-notices') {
+          noticesHtml = html;
+          composeSettings();
+        }
+      });
+    },
     notify: message => messages.push(message)
   });
   return {
@@ -62,16 +112,19 @@ function createSession() {
       const target = { dataset: { action, id }, closest: () => target };
       handlers.get('click')({ target });
       await nextTurn();
+      await Promise.all([noticesRender, petsRender, viewRender]);
     },
-    change(id, value) {
+    async change(id, value) {
       handlers.get('change')({ target: { id, value, closest: () => null } });
+      await Promise.all([noticesRender, petsRender, viewRender]);
     },
     async submit(kind, values, id = '') {
       nodes.get('#form-error').textContent = '';
       const submit = { disabled: false, isConnected: true };
       const form = { dataset: { form: kind, id }, values, elements: {},
-        matches: selector => selector === 'form[data-form]', querySelector: () => submit };
+        matches: selector => selector === 'form[data-form]', querySelector: selector => selector === '[data-form-error]' ? nodes.get('#form-error') : submit };
       await handlers.get('submit')({ target: form, preventDefault() {} });
+      await Promise.all([noticesRender, petsRender, viewRender]);
       return nodes.get('#form-error').textContent;
     },
     async login(email) {
@@ -127,17 +180,17 @@ assert.equal(await session.submit('agenda-note', { ...values, date: '2026-11-11'
 assert.equal(saved().agendaNotes.length, 1);
 assert.equal(note(adminId).date, '2026-11-11');
 assert.match(session.content(), /Todo el día/);
-session.change('agenda-mode', 'day');
+await session.change('agenda-mode', 'day');
 assert.match(session.content(), /Operación reprogramada/);
 await session.click('agenda-period', '1');
 assert.doesNotMatch(session.content(), /Operación reprogramada/);
 await session.click('agenda-period', '-1');
-session.change('agenda-mode', 'week');
+await session.change('agenda-mode', 'week');
 assert.match(session.content(), /Operación reprogramada/);
 await session.click('agenda-period', '1');
 assert.doesNotMatch(session.content(), /Operación reprogramada/);
 await session.click('agenda-period', '-1');
-session.change('agenda-mode', 'month');
+await session.change('agenda-mode', 'month');
 assert.match(session.content(), /Noviembre (?:de )?2026/);
 await session.click('agenda-period', '1');
 assert.match(session.content(), /Diciembre (?:de )?2026/);
@@ -154,7 +207,7 @@ for (const invalid of [{ title: '  ' }, { title: 'x'.repeat(161) }, { date: '202
   assert.notEqual(await session.submit('agenda-note', { ...values, ...invalid }), '');
   assert.equal(storage.get(KEY), before, 'Un formulario inválido no cambia datos');
 }
-session.change('agenda-date', 'incorrecta');
+await session.change('agenda-date', 'incorrecta');
 assert.doesNotMatch(session.content(), /Invalid Date|NaN/);
 const beforeFailure = storage.get(KEY);
 rejectWrites = true;
@@ -271,3 +324,4 @@ assert.equal(await session.submit('agenda-note', values), '');
 assert.equal(saved().agendaNotes.length, 1);
 session.stop();
 console.log('OK: agenda personal, altas/ediciones/bajas, vistas, persistencia, permisos entre cuentas, validaciones, rollback, agenda de cuidados y ausencia de reservas nuevas.');
+mock.timers.reset();

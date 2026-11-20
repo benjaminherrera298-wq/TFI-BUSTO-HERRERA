@@ -8,3 +8,5 @@ coverage/
 *.log
 Thumbs.db
 /reports/audit-system-latest.json
+
+.migration-final/

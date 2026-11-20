@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1",
+    "dev": "vite --host 127.0.0.1 --configLoader native",
+    "build": "vite build --configLoader native",
+    "preview": "vite preview --host 127.0.0.1 --configLoader native",
     "test": "node --test",
     "test:regression": "node scripts/verify-attention-facade.mjs && node scripts/verify-personal-agenda.mjs && node scripts/verify-pet-avatars.mjs && node scripts/audit-system.mjs"
   },

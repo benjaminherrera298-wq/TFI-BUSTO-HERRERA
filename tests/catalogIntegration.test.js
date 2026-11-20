@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.js';
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import { loadVueComponent } from './helpers/loadVueComponent.js';
+import { renderApplicationView, withViewRendering } from './helpers/loadViewComponents.js';
+
+const PetsView = await loadVueComponent(new URL('../src/views/pets/PetsView.vue', import.meta.url));
 
 const KEY = 'veterinaria-prototipo-v1';
 const globalNames = ['localStorage', 'document', 'window', 'location', 'history', 'FormData'];
@@ -51,6 +57,8 @@ function session() {
     showModal() { this.open = true; }, close() { this.open = false; }
   }]));
   let view = 'legacy';
+  let petsRender = Promise.resolve();
+  let viewRender = Promise.resolve();
 
   globalThis.localStorage = {
     getItem: key => store.get(key) ?? null,
@@ -81,10 +89,20 @@ function session() {
       htmlRenders.push(target.id);
       if (['app', 'content'].includes(target.id)) view = 'legacy';
     },
+    showView(target, name, props) {
+      assert.ok(target, 'Expected a Vue render target');
+      if (['app', 'content'].includes(target.id)) view = name;
+      viewRender = renderApplicationView(name, props).then(html => { target.html = html; });
+    },
     showCatalog(target, props) {
       assert.equal(target, nodes.get('#content'));
       catalogRenders.push(props);
       view = 'catalog';
+    },
+    showPets(target, props) {
+      assert.equal(target, nodes.get('#content'));
+      view = 'pets';
+      petsRender = renderToString(createSSRApp(PetsView, props)).then(html => { target.html = html; });
     },
     notify: message => messages.push(message)
   });
@@ -92,7 +110,7 @@ function session() {
 
   return {
     nodes, messages, htmlRenders, catalogRenders, stop,
-    props: () => catalogRenders.at(-1),
+    props: () => withViewRendering(catalogRenders.at(-1), () => viewRender),
     view: () => view,
     data: () => JSON.parse(store.get(KEY)),
     async submit(kind, values, id = '') {
@@ -100,9 +118,10 @@ function session() {
       const button = { disabled: false, isConnected: true };
       const form = {
         values, dataset: { form: kind, id }, elements: { photo: { files: [] } },
-        matches: selector => selector === 'form[data-form]', querySelector: () => button
+        matches: selector => selector === 'form[data-form]', querySelector: selector => selector === '[data-form-error]' ? nodes.get('#form-error') : button
       };
       await handlers.get('submit')({ target: form, preventDefault() {} });
+      await Promise.all([petsRender, viewRender]);
       return nodes.get('#form-error').textContent;
     },
     async login(id) {
@@ -112,12 +131,14 @@ function session() {
       const target = { dataset: { action, id }, closest: () => target };
       handlers.get('click')({ target });
       await nextTurn();
+      await Promise.all([petsRender, viewRender]);
     },
-    storageChange(update) {
+    async storageChange(update) {
       const data = this.data();
       update(data);
       store.set(KEY, JSON.stringify(data));
       windowHandlers.get('storage')({ key: KEY });
+      await viewRender;
     }
   };
 }
@@ -130,7 +151,7 @@ test('el catálogo conserva el acceso y los productos visibles de cada rol', asy
       await app.click('nav', 'products');
       if (role === 'vet') {
         assert.equal(app.catalogRenders.length, 0);
-        assert.equal(app.view(), 'legacy');
+        assert.equal(app.view(), 'HomeView');
       } else {
         assert.equal(app.view(), 'catalog');
         assert.equal(app.props().canManage, role !== 'owner');
@@ -214,19 +235,19 @@ test('la navegación, el cierre de sesión y storage conservan el catálogo sinc
   const app = session();
   await app.login('admin');
   await app.click('nav', 'products');
-  app.storageChange(data => { data.products[0].name = 'Actualizado desde otra pestaña'; });
+  await app.storageChange(data => { data.products[0].name = 'Actualizado desde otra pestaña'; });
   assert.equal(app.props().products[0].name, 'Actualizado desde otra pestaña');
   assert.equal(app.view(), 'catalog');
 
   app.props().onSearch('Sin coincidencias');
   await app.click('nav', 'pets');
-  assert.equal(app.view(), 'legacy');
+  assert.equal(app.view(), 'pets');
   assert.match(app.nodes.get('#content').html, /Mascotas/);
   await app.click('nav', 'products');
   assert.equal(app.props().query, '');
   assert.equal(app.view(), 'catalog');
   await app.click('logout');
-  assert.equal(app.view(), 'legacy');
+  assert.equal(app.view(), 'LoginView');
   assert.match(app.nodes.get('#app').html, /data-form="login"/);
 
   await app.login('owner');
@@ -234,8 +255,8 @@ test('la navegación, el cierre de sesión y storage conservan el catálogo sinc
   assert.equal(app.props().canManage, false);
   assert.equal(app.props().products[0].name, 'Actualizado desde otra pestaña');
   const renders = app.catalogRenders.length;
-  app.storageChange(data => { data.users.find(account => account.id === 'owner').active = false; });
-  assert.equal(app.view(), 'legacy');
+  await app.storageChange(data => { data.users.find(account => account.id === 'owner').active = false; });
+  assert.equal(app.view(), 'LoginView');
   assert.equal(app.catalogRenders.length, renders);
   assert.match(app.nodes.get('#app').html, /data-form="login"/);
   assert.match(app.messages.at(-1), /sesión ya no está habilitada/);

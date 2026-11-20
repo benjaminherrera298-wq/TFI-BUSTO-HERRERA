@@ -5,8 +5,11 @@ import { startVeterinaryApplication } from '../src/legacy/veterinaryApplication.
 import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { loadVueComponent } from '../tests/helpers/loadVueComponent.js';
+import { renderApplicationView } from '../tests/helpers/loadViewComponents.js';
 
 const CatalogView = await loadVueComponent(new URL('../src/views/catalog/CatalogView.vue', import.meta.url));
+const NoticesView = await loadVueComponent(new URL('../src/views/notices/NoticesView.vue', import.meta.url));
+const PetsView = await loadVueComponent(new URL('../src/views/pets/PetsView.vue', import.meta.url));
 
 // Auditoría aislada: ejecuta eventos reales con almacenamiento ficticio.
 // No simula las restricciones nativas del navegador ni evalúa el diseño visual.
@@ -49,17 +52,56 @@ function harness(initial = fixture(), { theme = 'dark', savedTheme, lockedRole =
     getAll(key) { return this.rows.filter(([name]) => key === name).map(([, value]) => value); }
     get(key) { return this.getAll(key)[0] ?? null; }
   };
-  const nodes = new Map(['app', 'content', 'modal', 'form-error', 'global-results'].map(id => [`#${id}`, node(id)]));
+  const nodes = new Map(['app', 'content', 'modal', 'form-error', 'global-results', 'settings-notices'].map(id => [`#${id}`, node(id)]));
   const handlers = new Map();
   const messages = [];
   let catalogRender = Promise.resolve();
+  let noticesRender = Promise.resolve();
+  let petsRender = Promise.resolve();
+  let viewRender = Promise.resolve();
+  let contentHtml = '';
+  let noticesHtml = '';
+  function composeSettings() {
+    nodes.get('#content').html = contentHtml.replace(
+      /(<section\b[^>]*\bid="settings-notices"[^>]*>)[\s\S]*?(<\/section>)/,
+      (match, open, close) => open + noticesHtml + close
+    );
+  }
   const stop = startVeterinaryApplication({ lockedRole,
     root: { querySelector: selector => nodes.get(selector) ?? null, querySelectorAll: () => [] },
     on: (name, callback) => handlers.set(name, callback),
-    setHtml(target, html) { assert.ok(target, 'Expected a render target'); target.html = html; },
+    setHtml(target, html) {
+      assert.ok(target);
+      target.html = html;
+      if (target.id === 'content') contentHtml = html;
+    },
+    showView(target, name, props) {
+      assert.ok(target, 'Expected a Vue render target');
+      viewRender = renderApplicationView(name, props).then(html => {
+        target.html = html;
+        if (target.id === 'content') {
+          contentHtml = html;
+          if (name === 'SettingsView') composeSettings();
+        }
+      });
+    },
     showCatalog(target, props) {
-      assert.ok(target, 'Expected a catalog render target');
+      assert.ok(target);
       catalogRender = renderToString(createSSRApp(CatalogView, props)).then(html => { target.html = html; });
+    },
+    showPets(target, props) {
+      assert.ok(target);
+      petsRender = renderToString(createSSRApp(PetsView, props)).then(html => { target.html = html; });
+    },
+    showNotices(target, props) {
+      assert.ok(target);
+      noticesRender = renderToString(createSSRApp(NoticesView, props)).then(html => {
+        target.html = html;
+        if (target.id === 'settings-notices') {
+          noticesHtml = html;
+          composeSettings();
+        }
+      });
     },
     notify: message => messages.push(message)
   });
@@ -72,14 +114,17 @@ function harness(initial = fixture(), { theme = 'dark', savedTheme, lockedRole =
     async submit(kind, values, id = '') {
       nodes.get('#form-error').textContent = '';
       const submit = { disabled: false, isConnected: true };
-      const form = { values, dataset: { form: kind, id }, elements: { logo: { files: [] }, photo: { files: [] } }, matches: selector => selector === 'form[data-form]', querySelector: () => submit };
+      const form = { values, dataset: { form: kind, id }, elements: { logo: { files: [] }, photo: { files: [] } }, matches: selector => selector === 'form[data-form]', querySelector: selector => selector === '[data-form-error]' ? nodes.get('#form-error') : submit };
       await handlers.get('submit')({ target: form, preventDefault() {} });
-      await catalogRender;
+      await Promise.all([catalogRender, noticesRender, petsRender, viewRender]);
       return nodes.get('#form-error').textContent;
     },
     async login(id = 'admin') { const error = await this.submit('login', { email: `${id}@example.com`, password: '123456' }); assert.equal(error, ''); },
-    async click(action, id = '') { const target = { ...node(), dataset: { action, id } }; target.closest = () => target; handlers.get('click')({ target }); await nextTurn(); await catalogRender; },
-    change(id, value) { handlers.get('change')({ target: { id, value, closest: () => null } }); }
+    async click(action, id = '') { const target = { ...node(), dataset: { action, id } }; target.closest = () => target; handlers.get('click')({ target }); await nextTurn(); await Promise.all([catalogRender, noticesRender, petsRender, viewRender]); },
+    async change(id, value) {
+      handlers.get('change')({ target: { id, value, closest: () => null } });
+      await Promise.all([noticesRender, petsRender, viewRender]);
+    }
     ,input(target) { handlers.get('input')({ target }); }
   };
 }

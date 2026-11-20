@@ -45,19 +45,7 @@ test('el adaptador actualiza una instancia y la desmonta antes de reemplazar su 
   const previousNode = globalThis.Node;
   globalThis.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
   globalThis.document = {
-    createElement(tag) {
-      const element = new MemoryNode();
-      if (tag === 'template') {
-        element.content = new MemoryNode();
-        Object.defineProperty(element, 'innerHTML', {
-          set(value) {
-            assert.equal(value, '', 'Esta prueba solo necesita reemplazar por HTML vacío.');
-            element.content.textContent = '';
-          }
-        });
-      }
-      return element;
-    },
+    createElement: () => new MemoryNode(),
     createTextNode: text => new MemoryNode(3, text),
     createComment: text => new MemoryNode(8, text)
   };
@@ -94,7 +82,7 @@ test('el adaptador actualiza una instancia y la desmonta antes de reemplazar su 
   assert.equal(target.firstChild, paragraph);
   assert.equal(paragraph.textContent, 'Actualizado');
 
-  screens.setHtml(parent, '');
+  screens.clear(parent);
   assert.deepEqual(events, ['desmontar hijo', 'retirar contenedor']);
   assert.equal(target.firstChild, null);
 
@@ -106,4 +94,28 @@ test('el adaptador actualiza una instancia y la desmonta antes de reemplazar su 
   assert.equal(events.filter(event => event === 'desmontar hijo').length, 2);
   screens.dispose();
   assert.equal(events.filter(event => event === 'desmontar hijo').length, 2);
+
+  // Configuración agrega un tercer nivel: app → content → settings-notices.
+  const nested = createScreenRenderer();
+  t.after(() => nested.dispose());
+  const nestedEvents = [];
+  const app = new MemoryNode();
+  nested.setComponent(app, { setup: () => () => h('main') }, {});
+  const content = app.firstChild;
+  nested.setComponent(content, { setup: () => () => h('section') }, {});
+  const notices = content.firstChild;
+  notices.onRemove = () => nestedEvents.push('retirar host de avisos');
+  content.onRemove = () => nestedEvents.push('retirar content');
+  nested.setComponent(notices, {
+    setup() {
+      onUnmounted(() => nestedEvents.push('desmontar avisos'));
+      return () => h('p', 'Avisos de prueba');
+    }
+  }, {});
+  nested.clear(app);
+  assert.deepEqual(nestedEvents, ['desmontar avisos', 'retirar host de avisos', 'retirar content']);
+  assert.equal(notices.firstChild, null);
+  nested.dispose();
+  assert.equal(app.childNodes.length, 0);
+  assert.equal(nestedEvents.filter(event => event === 'desmontar avisos').length, 1);
 });

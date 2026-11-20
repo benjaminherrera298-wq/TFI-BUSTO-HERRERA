@@ -1,33 +1,13 @@
-import { Fragment, h, render } from 'vue';
+import { h, render } from 'vue';
 
-// Los generadores de las pantallas existentes producen HTML escapado.
-// Este adaptador lo convierte en nodos de Vue, sin usar v-html.
+// Monta las vistas y desmonta sus regiones internas antes de reemplazar un padre.
 export function createScreenRenderer() {
   const mounted = new Set();
 
-  function toVNode(node) {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
-    if (node.nodeType !== Node.ELEMENT_NODE) return null;
-    const props = {};
-    for (const attribute of node.attributes) {
-      if (/^on/i.test(attribute.name)) {
-        // Único evento inline original: cantidades enteras de medicamentos.
-        if (attribute.name === 'oninput' && node.name === 'tmed-quantity[]') {
-          props.onInput = event => {
-            event.target.value = event.target.value.replace(/[^0-9]/g, '');
-          };
-        }
-      } else {
-        props[attribute.name] = attribute.value;
-      }
-    }
-    return h(node.localName, props, [...node.childNodes].map(toVNode).filter(v => v !== null));
-  }
-
   function prepareTarget(target) {
     if (!target) throw new Error('No se encontró el contenedor de la pantalla.');
-    // Las pantallas pueden contener regiones renderizadas independientemente.
-    for (const child of [...mounted]) {
+    // Desmontamos de hijos a padres antes de retirar sus contenedores.
+    for (const child of [...mounted].reverse()) {
       if (child !== target && target.contains(child)) {
         render(null, child);
         mounted.delete(child);
@@ -35,14 +15,10 @@ export function createScreenRenderer() {
     }
   }
 
-  function setHtml(target, html) {
+  function clear(target) {
     prepareTarget(target);
-    const template = document.createElement('template');
-    template.innerHTML = String(html);
-    const nodes = [...template.content.childNodes].map(toVNode).filter(v => v !== null);
-    // Render síncrono: el módulo de negocio consulta formularios inmediatamente.
-    render(h(Fragment, { key: Symbol('screen') }, nodes), target);
-    mounted.add(target);
+    render(null, target);
+    mounted.delete(target);
   }
 
   function setComponent(target, component, props) {
@@ -53,9 +29,8 @@ export function createScreenRenderer() {
   }
 
   function dispose() {
-    for (const target of [...mounted].reverse()) render(null, target);
-    mounted.clear();
+    for (const target of [...mounted].reverse()) clear(target);
   }
 
-  return { setHtml, setComponent, dispose };
+  return { setComponent, clear, dispose };
 }

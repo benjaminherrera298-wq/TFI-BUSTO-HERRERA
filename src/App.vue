@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue';
 import ToastMessage from './components/shared/ToastMessage.vue';
-import CatalogView from './views/catalog/CatalogView.vue';
+import { viewComponents } from './views/viewComponents.js';
 import { createScreenRenderer } from './legacy/screenRenderer';
 import { startVeterinaryApplication } from './legacy/veterinaryApplication';
 
@@ -14,6 +14,15 @@ let timer;
 let stop;
 
 function dispatch(type, event) { return handlers[type]?.(event); }
+function showView(target, name, props) {
+  const component = viewComponents[name];
+  if (!component) throw new Error('No existe la vista ' + name);
+  const { body, ...frameProps } = props;
+  const values = name === 'ModalFrame'
+    ? { ...frameProps, bodyComponent: viewComponents[body.view], bodyProps: body.props }
+    : props;
+  screens.setComponent(target, component, values);
+}
 function notify(text) {
   message.value = String(text);
   visible.value = true;
@@ -27,8 +36,10 @@ onMounted(() => {
   stop = startVeterinaryApplication({
     root: container.value,
     lockedRole: roles[requestedRole] ?? null,
-    setHtml: screens.setHtml,
-    showCatalog: (target, props) => screens.setComponent(target, CatalogView, props),
+    showView,
+    showCatalog: (target, props) => showView(target, 'CatalogView', props),
+    showNotices: (target, props) => showView(target, 'NoticesView', props),
+    showPets: (target, props) => showView(target, 'PetsView', props),
     notify,
     on: (type, handler) => { handlers[type] = handler; }
   });
