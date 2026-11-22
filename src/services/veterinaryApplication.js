@@ -1,6 +1,7 @@
 import { createAttentionFacade } from './attentionFacade.js';
 import { populateSamplePractice } from './samplePractice.js';
 import { PET_AVATARS, findPetAvatar } from './petAvatars.js';
+import { canAccessPet, getPetProfile, getPetProfileByQr } from './petProfile.js';
 
 export function startVeterinaryApplication(ui) {
 'use strict';
@@ -1344,10 +1345,7 @@ function recoverScreen() {
 // PERMISOS Y NAVEGACIÓN
 
 function canPet(pet) {
-  return pet && user && (
-    user.role !== 'owner' ||
-    pet.ownerId === user.ownerId
-  );
+  return canAccessPet(pet, user);
 }
 
 function pets() {
@@ -2365,8 +2363,9 @@ function petsView() {
 
 function petProfile() {
   const pet = find('pets', selectedPet);
+  const profile = getPetProfile(db, pet, user);
 
-  if (!canPet(pet)) {
+  if (!profile) {
     return `
       <div class="empty">
         No tenés permiso para consultar esta mascota.
@@ -2415,12 +2414,7 @@ function petProfile() {
     Estudios: 'Estudio'
   };
 
-  const records = db.clinical
-    .filter(record =>
-      record.petId === pet.id &&
-      (user.role !== 'owner' || record.visible)
-    )
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const records = profile.records;
 
   let content = '';
 
@@ -6193,10 +6187,10 @@ async function submitForm(form) {
         location.hash.slice(1)
       ).get('qr');
 
-      const pet = db.pets.find(item => item.qr === qr);
+      const profile = getPetProfileByQr(db, qr, user);
 
-      if (pet && canPet(pet)) {
-        navigate('pet', pet.id);
+      if (profile) {
+        navigate('pet', profile.pet.id);
       } else {
         navigate(user.role === 'owner' ? 'pets' : 'home');
       }
